@@ -14,14 +14,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Neovim Repository
-        run: |
-          git clone https://github.com/neovim/neovim && cd "$(basename "$_" .git)"
-          git checkout stable
-          make CMAKE_BUILD_TYPE=Release
-          cd build && cpack -G DEB && sudo dpkg -i nvim-linux64.deb
       - name: Build Prerequisites
         run: |
           sudo apt-get update
           sudo apt-get install ninja-build gettext cmake unzip curl
           sudo apt-get install build-essential binutils lintian debhelper dh-make devscripts
+      - name: Checkout Neovim Repository and build
+        run: |
+          git clone https://github.com/neovim/neovim && cd "$(basename "$_" .git)"
+          git checkout stable
+          make CMAKE_BUILD_TYPE=Release
+          cd build && cpack -G DEB && sudo dpkg -i nvim-linux64.deb
