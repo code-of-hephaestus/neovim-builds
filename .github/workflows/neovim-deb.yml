@@ -34,7 +34,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           artifacts: ./build/nvim-linux64.deb
-          tag: "latest"
+          tag: "test-1"
 
       - name: Get Release Asset URL
         run: echo "Download the .deb file at ${{ steps.upload-release-asset.outputs.download_url }}"
