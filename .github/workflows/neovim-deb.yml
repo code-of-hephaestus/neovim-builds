@@ -31,7 +31,7 @@ jobs:
         id: upload-release-asset
         uses: ncipollo/release-action@v1
         with:
-          artifacts: ./build/nvim-linux64.deb  # Adjust the path to your .deb file
+          artifacts: nvim-linux64.deb  # Adjust the path to your .deb file
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
