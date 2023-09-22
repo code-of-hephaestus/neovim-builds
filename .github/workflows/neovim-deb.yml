@@ -26,12 +26,14 @@ jobs:
           git checkout stable
           make CMAKE_BUILD_TYPE=Release
           cd build && cpack -G DEB
+          ls
+          pwd
       
       - name: Upload .deb as Release Asset
         id: upload-release-asset
         uses: ncipollo/release-action@v1
         with:
-          artifacts: nvim-linux64.deb
+          artifacts: ./build/nvim-linux64.deb
           tag: "latest"
 
       - name: Get Release Asset URL
