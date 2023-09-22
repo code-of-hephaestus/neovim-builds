@@ -43,3 +43,4 @@ jobs:
           upload_url: ${{ steps.create-new-release.outputs.upload_url }}
           asset_path: ./nvim-linux64.deb
           asset_name: nvim-linux64-v${{ github.run_number }}.deb
+          asset_content_type: application/vnd.debian.binary-package
