@@ -2,6 +2,8 @@ name: Build Neovim .deb Package
 
 on:
   push:
+    tags:
+    - '*'
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
@@ -24,18 +26,15 @@ jobs:
           git clone https://github.com/neovim/neovim && cd "$(basename "$_" .git)"
           git checkout stable
           make CMAKE_BUILD_TYPE=Release
-          cd build && cpack -G DEB && sudo dpkg -i nvim-linux64.deb
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
+          cd build && cpack -G DEB
+      
+      - name: Upload .deb as Release Asset
+        id: upload-release-asset
+        uses: ncipollo/release-action@v3
         with:
-          tag_name: ${{ github.ref }}
-          files: |
-            ./build/nvim-linux64.deb  # Adjust the path to your .deb file
+          files: ./build/nvim-linux64.deb  # Adjust the path to your .deb file
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish Release
-        run: echo "Release ${{ steps.create_release.outputs.release_id }} created"
-
-
+      - name: Get Release Asset URL
+        run: echo "Download the .deb file at ${{ steps.upload-release-asset.outputs.download_url }}"
