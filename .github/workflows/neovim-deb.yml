@@ -27,7 +27,7 @@ jobs:
           git checkout stable
           make CMAKE_BUILD_TYPE=Release
           cd build && cpack -G DEB
-          deb_file=$(ls nvim-linux64.deb)
+          deb_file=$(realpath nvim-linux64.deb)
           echo "::set-output name=deb_file::$deb_file"
       - name: Create Github release
         id: create-new-release
