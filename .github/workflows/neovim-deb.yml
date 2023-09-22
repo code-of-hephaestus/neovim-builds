@@ -21,12 +21,14 @@ jobs:
           sudo apt-get install ninja-build gettext cmake unzip curl
           sudo apt-get install build-essential binutils lintian debhelper dh-make devscripts
       - name: Checkout Neovim Repository and build
+        id: build-nvim-deb
         run: |
           git clone https://github.com/neovim/neovim && cd "$(basename "$_" .git)"
           git checkout stable
           make CMAKE_BUILD_TYPE=Release
           cd build && cpack -G DEB
-      
+          deb_file=$(ls nvim-linux64.deb)
+          echo "::set-output name=deb_file::$deb_file"
       - name: Create Github release
         id: create-new-release
         uses: actions/create-release@v1
@@ -41,6 +43,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create-new-release.outputs.upload_url }}
-          asset_path: ./nvim-linux64.deb
+          asset_path: ${{ steps.build-nvim-deb.outputs.deb_file }}
           asset_name: nvim-linux64-v${{ github.run_number }}.deb
           asset_content_type: application/vnd.debian.binary-package
