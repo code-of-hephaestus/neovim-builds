@@ -3,10 +3,7 @@ name: Build Neovim .deb Package
 on:
   push:
     tags:
-    - 'v0.9.2'
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    - '*'
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
