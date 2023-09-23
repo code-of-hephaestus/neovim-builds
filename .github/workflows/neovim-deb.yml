@@ -16,12 +16,13 @@ jobs:
       contents: write
     steps:
       - name: Build Prerequisites
+        id: install-build-prerequisites
         run: |
           sudo apt-get update
           sudo apt-get install ninja-build gettext cmake unzip curl
           sudo apt-get install build-essential binutils lintian debhelper dh-make devscripts
       - name: Checkout Neovim Repository and build
-        id: build-nvim-deb
+        id: build-nvim-deb-pkg
         run: |
           git clone https://github.com/neovim/neovim && cd "$(basename "$_" .git)"
           git checkout stable
@@ -29,20 +30,30 @@ jobs:
           cd build && cpack -G DEB
           deb_file=$(realpath nvim-linux64.deb)
           echo "::set-output name=deb_file::$deb_file"
+      - name: Parse release info
+        id: parse-release-info
+        run: |
+          release_info=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.body' | head -5)
+          echo "::set-output name=release_info::$release_info"
+      - name: Parse version number
+        id: parse-version-number
+        run: |
+          version_number=$(echo "${{ steps.release_info.outputs.release_info }}" | grep -oE "v[0-9]+.[0-9].+[0-9]+")
+          echo "::set-output name=version_number::$version_number"
       - name: Create Github release
         id: create-new-release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.run_number }}
-          release_name: ${{ github.run_number }}
+          tag_name: stable-${{ steps.parse-version-number.outputs.version_number }}
+          release_name: stable-${{ steps.parse-version-number.outputs.version_number }}
       - name: Upload assets
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create-new-release.outputs.upload_url }}
-          asset_path: ${{ steps.build-nvim-deb.outputs.deb_file }}
-          asset_name: nvim-linux64-v${{ github.run_number }}.deb
+          asset_path: ${{ steps.build-nvim-deb-pkg.outputs.deb_file }}
+          asset_name: nvim-linux64-${{ steps.parse-version-number.outputs.version_number }}.deb
           asset_content_type: application/vnd.debian.binary-package
