@@ -38,7 +38,7 @@ jobs:
       - name: Parse version number
         id: parse-version-number
         run: |
-          version_number=$(echo "${{ steps.release_info.outputs.release_info }}" | grep -oE "v[0-9]+.[0-9].+[0-9]+")
+          version_number=$(echo "${{ steps.parse-release-info.outputs.release_info }}" | grep -oE "v[0-9]+.[0-9].+[0-9]+")
           echo "::set-output name=version_number::$version_number"
       - name: Create Github release
         id: create-new-release
