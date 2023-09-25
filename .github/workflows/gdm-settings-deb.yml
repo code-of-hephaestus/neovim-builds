@@ -25,7 +25,10 @@ jobs:
         id: build-gdm-settings-deb-pkg
         run: |
           git clone --depth=1 https://github.com/gdm-settings/gdm-settings && cd "$(basename "$_" .git)"
-          meson setup build
-          ls -al
-          deb_file=$(realpath nvim-linux64.deb)
-          echo "::set-output name=deb_file::$deb_file"
+          whereis meson
+          which meson
+          meson --version
+          # meson setup build
+          # ls -al
+          # deb_file=$(realpath nvim-linux64.deb)
+          # echo "::set-output name=deb_file::$deb_file"
