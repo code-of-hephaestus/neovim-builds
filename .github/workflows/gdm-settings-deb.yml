@@ -19,8 +19,8 @@ jobs:
         id: install-build-prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install ninja-build gettext cmake unzip curl meson python-gi-dev
-          sudo apt-get install build-essential binutils lintian debhelper dh-make devscripts
+          sudo apt install gdm3 policykit-1 libadwaita-1-dev libglib2.0-dev python-gi-dev gettext
+          sudo apt install meson gobject-introspection
       - name: Checkout gdm-settings Repository and build
         id: build-gdm-settings-deb-pkg
         run: |
