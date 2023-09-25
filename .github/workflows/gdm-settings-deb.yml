@@ -19,7 +19,7 @@ jobs:
         id: install-build-prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install ninja-build gettext cmake unzip curl meson
+          sudo apt-get install ninja-build gettext cmake unzip curl meson python-gi-dev
           sudo apt-get install build-essential binutils lintian debhelper dh-make devscripts
       - name: Checkout gdm-settings Repository and build
         id: build-gdm-settings-deb-pkg
