@@ -1,0 +1,61 @@
+name: Build Neovim .deb Package
+
+on:
+  push:
+    tags:
+    - '*'
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Build Prerequisites
+        id: install-build-prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install ninja-build gettext cmake unzip curl
+          sudo apt-get install build-essential binutils lintian debhelper dh-make devscripts
+      - name: Checkout Neovim Repository and build
+        id: build-nvim-deb-pkg
+        run: |
+          git clone https://github.com/neovim/neovim && cd "$(basename "$_" .git)"
+          git checkout stable
+          make CMAKE_BUILD_TYPE=Release
+          cd build && cpack -G DEB
+          deb_file=$(realpath nvim-linux64.deb)
+          echo "deb_file=$deb_file" >> $GITHUB_OUTPUT
+      - name: Parse release info
+        id: parse-release-info
+        run: |
+          release_info=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.body' | head -5)
+          echo "$release_info"
+      - name: Parse version number
+        id: parse-version-number
+        run: |
+          version_number=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.body' | head -5 | grep -oE "v[0-9]+.[0-9].+[0-9]+")
+          echo "version_number=$version_number" >> $GITHUB_OUTPUT
+      - name: Create Github release
+        id: create-new-release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: nvim-${{ steps.parse-version-number.outputs.version_number }}-stable-linux-amd64
+          release_name: nvim-${{ steps.parse-version-number.outputs.version_number }}-stable-linux-amd64
+      - name: Upload assets
+        id: upload-release-assets
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create-new-release.outputs.upload_url }}
+          asset_path: ${{ steps.build-nvim-deb-pkg.outputs.deb_file }}
+          body: ${{ steps.parse-release-info.outputs.release_info }}
+          asset_name: nvim-${{ steps.parse-version-number.outputs.version_number }}-stable-linux-amd64.deb
+          asset_content_type: application/vnd.debian.binary-package
