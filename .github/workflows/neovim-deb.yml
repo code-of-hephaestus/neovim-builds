@@ -29,17 +29,17 @@ jobs:
           make CMAKE_BUILD_TYPE=Release
           cd build && cpack -G DEB
           deb_file=$(realpath nvim-linux64.deb)
-          echo "::set-output name=deb_file::$deb_file"
+          echo "deb_file=$deb_file" >> $GITHUB_OUTPUT
       - name: Parse release info
         id: parse-release-info
         run: |
           release_info=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.body' | head -5)
-          echo "::set-output name=release_info::$release_info"
+          echo "release_info=$release_info" >> $GITHUB_OUTPUT
       - name: Parse version number
         id: parse-version-number
         run: |
           version_number=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.body' | head -5 | grep -oE "v[0-9]+.[0-9].+[0-9]+")
-          echo "::set-output name=version_number::$version_number"
+          echo "version_number=$version_number" >> $GITHUB_OUTPUT
       - name: Create Github release
         id: create-new-release
         uses: actions/create-release@v1
