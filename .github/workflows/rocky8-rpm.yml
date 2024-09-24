@@ -19,13 +19,20 @@ jobs:
               luajit luajit-devel lua lua-devel libuv-devel unibilium-devel libtermkey-devel libvterm-devel \
               msgpack-devel git
 
+      - name: Clone and prepare Lua compat-5.3
+        run: |
+          git clone https://github.com/keplerproject/lua-compat-5.3.git
+          cd lua-compat-5.3
+          mkdir -p build/include
+          cp *.h *.c build/include/
+
       - name: Build and install luv
         run: |
           git clone https://github.com/luvit/luv.git
           cd luv
           mkdir build
           cd build
-          cmake .. -DWITH_SHARED_LIBUV=ON -DLUA_BUILD_TYPE=System -DCMAKE_BUILD_TYPE=Release
+          cmake .. -DWITH_SHARED_LIBUV=ON -DLUA_BUILD_TYPE=System -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS="-I/lua-compat-5.3/build/include"
           make
           make install
           echo "/usr/local/lib64" > /etc/ld.so.conf.d/local.conf
