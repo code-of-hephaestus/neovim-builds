@@ -25,14 +25,24 @@ jobs:
       - name: Download and prepare Neovim source
         run: |
           wget https://github.com/neovim/neovim/archive/refs/tags/stable.tar.gz -O ~/rpmbuild/SOURCES/neovim-stable.tar.gz
-          version=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.tag_name' | sed 's/^v//')
-          echo "VERSION=$version" >> $GITHUB_ENV
+
+      - name: Parse release info
+        id: parse-release-info
+        run: |
+          release_info=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.body' | head -5)
+          echo "$release_info"
+      
+      - name: Parse version number
+        id: parse-version-number
+        run: |
+          version=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.body' | head -5 | grep -oE "v[0-9]+.[0-9].+[0-9]+")
+          echo "VERSION=$version" >> $GITHUB_OUTPUT
 
       - name: Create RPM spec file
         run: |
           cat << EOF > ~/rpmbuild/SPECS/neovim.spec
           Name:           neovim
-          Version:        ${{ env.VERSION }}
+          Version:        ${{ steps.parse-version-number.outputs.VERSION }}
           Release:        1%{?dist}
           Summary:        Vim-fork focused on extensibility and usability
 
@@ -66,14 +76,14 @@ jobs:
           %{_datadir}/nvim
 
           %changelog
-          * $(date "+%a %b %d %Y") GitHub Action <github-action@example.com> - ${{ env.VERSION }}-1
+          * $(date "+%a %b %d %Y") GitHub Action - ${{ steps.parse-version-number.outputs.VERSION }}
           - Automated RPM build
           EOF
 
       - name: Build RPM package
         run: |
           rpmbuild -ba ~/rpmbuild/SPECS/neovim.spec
-          echo "RPM_FILE=$(ls ~/rpmbuild/RPMS/x86_64/neovim-*.rpm)" >> $GITHUB_ENV
+          echo "RPM_FILE=$(ls ~/rpmbuild/RPMS/x86_64/neovim-*.rpm)" >> $GITHUB_OUTPUT
 
       - name: Display RPM info
         run: |
@@ -93,9 +103,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "nvim-${{ env.VERSION }}-stable-linux-amd64-rpm" \
-            --title "Neovim ${{ env.VERSION }} Stable (Linux AMD64 RPM)" \
-            --notes "Automated RPM build for Neovim ${{ env.VERSION }}" \
+          gh release create "nvim-${{ steps.parse-version-number.outputs.VERSION }}-stable-linux-amd64-rpm" \
+            --title "Neovim ${{ steps.parse-version-number.outputs.VERSION }} Stable (Linux AMD64 RPM)" \
+            --notes "Automated RPM build for Neovim ${{ steps.parse-version-number.outputs.VERSION }}" \
             ${{ env.RPM_FILE }}
 
       - name: Verify uploaded asset
@@ -106,7 +116,7 @@ jobs:
           sleep 15
 
           echo "Downloading asset..."
-          gh release download "nvim-${{ env.VERSION }}-stable-linux-amd64-rpm" -p '*.rpm'
+          gh release download "nvim-${{ steps.parse-version-number.outputs.VERSION }}-stable-linux-amd64-rpm" -p '*.rpm'
 
           echo "File details:"
           file *.rpm
