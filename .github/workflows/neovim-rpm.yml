@@ -60,12 +60,18 @@ jobs:
           mkdir -p %{buildroot}%{_mandir}/man1
           cp build/bin/nvim %{buildroot}%{_bindir}/
           cp -r runtime/* %{buildroot}%{_datadir}/nvim/
-          cp man/nvim.1 %{buildroot}%{_mandir}/man1/
+          if [ -f build/man/nvim.1 ]; then
+            cp build/man/nvim.1 %{buildroot}%{_mandir}/man1/
+          elif [ -f man/nvim.1 ]; then
+            cp man/nvim.1 %{buildroot}%{_mandir}/man1/
+          fi
 
           %files
           %{_bindir}/nvim
           %{_datadir}/nvim
+          %if 0%{?_mandir:1}
           %{_mandir}/man1/nvim.1*
+          %endif
 
           %changelog
           * $(date "+%a %b %d %Y") GitHub Action <github-action@example.com> - ${{ env.VERSION }}-1
