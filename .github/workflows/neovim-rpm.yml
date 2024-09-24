@@ -13,6 +13,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y rpm build-essential wget
+          # Install build dependencies
+          sudo apt-get install -y cmake gcc gettext make unzip
 
       - name: Set up RPM build environment
         run: |
