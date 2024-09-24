@@ -1,0 +1,117 @@
+name: Build Neovim .rpm Package
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: rockylinux:8
+    permissions:
+      contents: write
+    steps:
+      - name: Install Prerequisites
+        run: |
+          dnf install -y epel-release
+          dnf install -y rpm-build wget curl jq make cmake gcc unzip gettext ninja-build libtool autoconf automake pkg-config
+
+      - name: Set up RPM build environment
+        run: |
+          mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+          echo '%_topdir %(echo $HOME)/rpmbuild' > ~/.rpmmacros
+
+      - name: Download and prepare Neovim source
+        run: |
+          wget https://github.com/neovim/neovim/archive/refs/tags/stable.tar.gz -O ~/rpmbuild/SOURCES/neovim-stable.tar.gz
+          version=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.tag_name' | sed 's/^v//')
+          echo "VERSION=$version" >> $GITHUB_ENV
+
+      - name: Create RPM spec file
+        run: |
+          cat << EOF > ~/rpmbuild/SPECS/neovim.spec
+          Name:           neovim
+          Version:        ${{ env.VERSION }}
+          Release:        1%{?dist}
+          Summary:        Vim-fork focused on extensibility and usability
+
+          License:        Apache-2.0
+          URL:            https://neovim.io/
+          Source0:        %{name}-stable.tar.gz
+
+          BuildRequires:  make cmake gcc unzip gettext ninja-build libtool autoconf automake pkg-config
+
+          %description
+          Neovim is a project that seeks to aggressively refactor Vim in order to:
+          - Simplify maintenance and encourage contributions
+          - Split the work between multiple developers
+          - Enable advanced UIs without modifications to the core
+          - Maximize extensibility
+
+          %prep
+          %setup -q -n %{name}-stable
+
+          %build
+          make CMAKE_BUILD_TYPE=Release
+
+          %install
+          mkdir -p %{buildroot}%{_bindir}
+          mkdir -p %{buildroot}%{_datadir}/nvim
+          cp build/bin/nvim %{buildroot}%{_bindir}/
+          cp -r runtime/* %{buildroot}%{_datadir}/nvim/
+
+          %files
+          %{_bindir}/nvim
+          %{_datadir}/nvim
+
+          %changelog
+          * $(date "+%a %b %d %Y") GitHub Action <github-action@example.com> - ${{ env.VERSION }}-1
+          - Automated RPM build
+          EOF
+
+      - name: Build RPM package
+        run: |
+          rpmbuild -ba ~/rpmbuild/SPECS/neovim.spec
+          echo "RPM_FILE=$(ls ~/rpmbuild/RPMS/x86_64/neovim-*.rpm)" >> $GITHUB_ENV
+
+      - name: Display RPM info
+        run: |
+          echo "RPM file details:"
+          file ${{ env.RPM_FILE }}
+          rpm -qip ${{ env.RPM_FILE }}
+          echo "RPM contents:"
+          rpm -qlp ${{ env.RPM_FILE }}
+
+      - name: Install GitHub CLI
+        run: |
+          dnf install -y 'dnf-command(config-manager)'
+          dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
+          dnf install -y gh
+
+      - name: Create Github release and upload asset
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "nvim-${{ env.VERSION }}-stable-linux-amd64-rpm" \
+            --title "Neovim ${{ env.VERSION }} Stable (Linux AMD64 RPM)" \
+            --notes "Automated RPM build for Neovim ${{ env.VERSION }}" \
+            ${{ env.RPM_FILE }}
+
+      - name: Verify uploaded asset
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Waiting for asset to be processed..."
+          sleep 15
+
+          echo "Downloading asset..."
+          gh release download "nvim-${{ env.VERSION }}-stable-linux-amd64-rpm" -p '*.rpm'
+
+          echo "File details:"
+          file *.rpm
+
+          echo "RPM query info:"
+          rpm -qip *.rpm || echo "Failed to query downloaded RPM file"
+
+          echo "RPM contents:"
+          rpm -qlp *.rpm || echo "Failed to list contents of downloaded RPM file"
