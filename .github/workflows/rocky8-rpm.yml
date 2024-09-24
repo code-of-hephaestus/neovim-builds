@@ -109,28 +109,32 @@ jobs:
           echo "RPM contents:"
           rpm -qlp ${{ steps.build-rpm-package.outputs.RPM_FILE }}
 
-      - name: Install GitHub CLI
+      - name: Display RPM info
         run: |
-          dnf install -y 'dnf-command(config-manager)'
-          dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
-          dnf install -y gh git
+          echo "RPM file details:"
+          file ${{ steps.build-rpm-package.outputs.RPM_FILE }}
+          rpm -qip ${{ steps.build-rpm-package.outputs.RPM_FILE }}
+          echo "RPM contents:"
+          rpm -qlp ${{ steps.build-rpm-package.outputs.RPM_FILE }}
 
-      - name: Initialize Git repository
-        run: |
-          git config --global user.email "github-actions@github.com"
-          git config --global user.name "GitHub Actions"
-          git init -b main
-          git add .
-          git commit -m "Initial commit"
-
-      - name: Create Github release and upload asset
+      - name: Create Github release
+        id: create-new-release
+        uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "nvim-${{ steps.parse-version-number.outputs.VERSION }}-stable-linux-amd64-rpm" \
-            --title "Neovim ${{ steps.parse-version-number.outputs.VERSION }} Stable (Linux AMD64 RPM)" \
-            --notes "Automated RPM build for Neovim ${{ steps.parse-version-number.outputs.VERSION }}" \
-            ${{ steps.build-rpm-package.outputs.RPM_FILE }}
+        with:
+          tag_name: nvim-${{ steps.parse-version-number.outputs.VERSION }}-stable-linux-amd64-rpm
+          release_name: Neovim ${{ steps.parse-version-number.outputs.VERSION }} Stable (Linux AMD64 RPM)
+
+      - name: Upload assets
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create-new-release.outputs.upload_url }}
+          asset_path: ${{ steps.build-rpm-package.outputs.RPM_FILE }}
+          asset_name: neovim-${{ steps.parse-version-number.outputs.VERSION }}-amd64.rpm
+          asset_content_type: application/x-rpm
 
       - name: Verify uploaded asset
         env:
