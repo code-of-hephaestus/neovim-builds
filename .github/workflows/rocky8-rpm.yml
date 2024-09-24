@@ -15,7 +15,9 @@ jobs:
         run: |
           dnf install -y epel-release
           dnf config-manager --set-enabled powertools
-          dnf install -y rpm-build wget curl jq make cmake gcc unzip gettext libtool autoconf automake pkg-config ninja-build
+          dnf install -y rpm-build wget curl jq make cmake gcc gcc-c++ unzip gettext libtool autoconf automake pkg-config ninja-build \
+              luajit luajit-devel lua lua-devel libuv-devel unibilium-devel libtermkey-devel libvterm-devel \
+              msgpack-devel gperf libluv-devel tree-sitter-devel
 
       - name: Set up RPM build environment
         run: |
@@ -26,12 +28,6 @@ jobs:
         run: |
           wget https://github.com/neovim/neovim/archive/refs/tags/stable.tar.gz -O ~/rpmbuild/SOURCES/neovim-stable.tar.gz
 
-      - name: Parse release info
-        id: parse-release-info
-        run: |
-          release_info=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.body' | head -5)
-          echo "$release_info"
-      
       - name: Parse version number
         id: parse-version-number
         run: |
@@ -51,7 +47,11 @@ jobs:
           URL:            https://neovim.io/
           Source0:        %{name}-stable.tar.gz
 
-          BuildRequires:  make cmake gcc unzip gettext libtool autoconf automake pkg-config ninja-build
+          BuildRequires:  make cmake gcc gcc-c++ unzip gettext libtool autoconf automake pkg-config ninja-build
+          BuildRequires:  luajit-devel lua-devel libuv-devel unibilium-devel libtermkey-devel libvterm-devel
+          BuildRequires:  msgpack-devel gperf libluv-devel tree-sitter-devel
+
+          Requires:       luajit libuv unibilium libtermkey libvterm msgpack tree-sitter
 
           %description
           Neovim is a project that seeks to aggressively refactor Vim in order to:
@@ -64,18 +64,27 @@ jobs:
           %setup -q -n %{name}-stable
 
           %build
-          make CMAKE_BUILD_TYPE=Release
+          mkdir -p build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+                -DCMAKE_INSTALL_PREFIX=/usr \
+                -DENABLE_JEMALLOC=OFF \
+                -DUSE_BUNDLED=OFF \
+                -DUSE_BUNDLED_LUAROCKS=OFF \
+                ..
+          make %{?_smp_mflags}
 
           %install
-          rm -rf $RPM_BUILD_ROOT
-          mkdir -p %{buildroot}%{_bindir}
-          mkdir -p %{buildroot}%{_datadir}/nvim
-          cp build/bin/nvim %{buildroot}%{_bindir}/
-          cp -r runtime/* %{buildroot}%{_datadir}/nvim/
+          cd build
+          %make_install
 
           %files
           %{_bindir}/nvim
-          %{_datadir}/nvim
+          %{_datadir}/nvim/
+          %{_mandir}/man1/nvim.1.*
+          %{_datadir}/applications/nvim.desktop
+          %{_datadir}/icons/hicolor/*/apps/nvim.png
+          %{_datadir}/locale/*/LC_MESSAGES/nvim.mo
 
           %changelog
           * $(date "+%a %b %d %Y") GitHub Action - ${{ steps.parse-version-number.outputs.VERSION }}
@@ -92,14 +101,13 @@ jobs:
           echo "RPM_FILE=$(find ~/rpmbuild/RPMS/x86_64/ -name 'neovim-*.rpm' ! -name '*debug*')" >> $GITHUB_OUTPUT
 
       - name: Debug RPM build output
-        if: failure()
         run: |
           echo "Contents of ~/rpmbuild/RPMS:"
           ls -R ~/rpmbuild/RPMS
           echo "Contents of ~/rpmbuild/SRPMS:"
           ls -R ~/rpmbuild/SRPMS
-          echo "Last 100 lines of rpmbuild.log:"
-          tail -n 100 ~/rpmbuild/BUILD/rpmbuild.log || echo "rpmbuild.log not found"
+          echo "RPM file contents:"
+          rpm -qlp ${{ steps.build-rpm-package.outputs.RPM_FILE }}
 
       - name: Display RPM info
         run: |
