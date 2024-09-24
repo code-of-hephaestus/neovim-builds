@@ -17,7 +17,7 @@ jobs:
           dnf config-manager --set-enabled powertools
           dnf install -y rpm-build wget curl jq make cmake gcc gcc-c++ unzip gettext libtool autoconf automake pkg-config ninja-build \
               luajit luajit-devel lua lua-devel libuv-devel unibilium-devel libtermkey-devel libvterm-devel \
-              msgpack-devel gperf
+              msgpack-devel gperf git
 
       - name: Build and install libluv
         run: |
