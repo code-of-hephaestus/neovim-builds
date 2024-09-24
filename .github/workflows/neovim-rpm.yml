@@ -9,46 +9,72 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Build Prerequisites
-        id: install-build-prerequisites
+      - name: Install Prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build gettext cmake unzip curl
-          sudo apt-get install -y rpm
+          sudo apt-get install -y rpm build-essential wget
 
-      - name: Checkout Neovim Repository and build
-        id: build-nvim-rpm-pkg
+      - name: Set up RPM build environment
         run: |
-          git clone https://github.com/neovim/neovim && cd "$(basename "$_" .git)"
-          git checkout stable
+          mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+          echo '%_topdir %(echo $HOME)/rpmbuild' > ~/.rpmmacros
+
+      - name: Download and prepare Neovim source
+        run: |
+          wget https://github.com/neovim/neovim/archive/refs/tags/stable.tar.gz -O ~/rpmbuild/SOURCES/neovim-stable.tar.gz
+          version=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.tag_name' | sed 's/^v//')
+          echo "VERSION=$version" >> $GITHUB_ENV
+
+      - name: Create RPM spec file
+        run: |
+          cat << EOF > ~/rpmbuild/SPECS/neovim.spec
+          Name:           neovim
+          Version:        ${{ env.VERSION }}
+          Release:        1%{?dist}
+          Summary:        Vim-fork focused on extensibility and usability
+
+          License:        Apache-2.0
+          URL:            https://neovim.io/
+          Source0:        %{name}-stable.tar.gz
+
+          BuildRequires:  make, cmake, gcc, unzip, gettext
+
+          %description
+          Neovim is a project that seeks to aggressively refactor Vim in order to:
+          - Simplify maintenance and encourage contributions
+          - Split the work between multiple developers
+          - Enable advanced UIs without modifications to the core
+          - Maximize extensibility
+
+          %prep
+          %setup -q -n %{name}-stable
+
+          %build
           make CMAKE_BUILD_TYPE=Release
-          mkdir -p build && cd build
-          cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release ..
-          make
-          cpack -G RPM
-          echo "Build directory contents:"
-          ls -la
-          rpm_file=$(ls *.rpm)
-          if [ -z "$rpm_file" ]; then
-            echo "No RPM file found!"
-            exit 1
-          fi
-          echo "rpm_file=$rpm_file" >> $GITHUB_OUTPUT
+
+          %install
+          %make_install
+
+          %files
+          %{_bindir}/nvim
+          %{_datadir}/nvim/*
+          %{_mandir}/man1/nvim.1.*
+
+          %changelog
+          * $(date "+%a %b %d %Y") GitHub Action <github-action@example.com> - ${{ env.VERSION }}-1
+          - Automated RPM build
+          EOF
+
+      - name: Build RPM package
+        run: |
+          rpmbuild -ba ~/rpmbuild/SPECS/neovim.spec
+          echo "RPM_FILE=$(ls ~/rpmbuild/RPMS/x86_64/neovim-*.rpm)" >> $GITHUB_ENV
+
+      - name: Display RPM info
+        run: |
           echo "RPM file details:"
-          file "$rpm_file"
-          rpm -qip "$rpm_file" || echo "Failed to query RPM file"
-
-      - name: Parse release info
-        id: parse-release-info
-        run: |
-          release_info=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.body' | head -5)
-          echo "$release_info"
-
-      - name: Parse version number
-        id: parse-version-number
-        run: |
-          version_number=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.body' | head -5 | grep -oE "v[0-9]+.[0-9]+.[0-9]+")
-          echo "version_number=$version_number" >> $GITHUB_OUTPUT
+          file ${{ env.RPM_FILE }}
+          rpm -qip ${{ env.RPM_FILE }}
 
       - name: Create Github release
         id: create-new-release
@@ -56,23 +82,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: nvim-${{ steps.parse-version-number.outputs.version_number }}-stable-linux-amd64-rpm
-          release_name: nvim-${{ steps.parse-version-number.outputs.version_number }}-stable-linux-amd64-rpm
+          tag_name: nvim-${{ env.VERSION }}-stable-linux-amd64-rpm
+          release_name: Neovim ${{ env.VERSION }} Stable (Linux AMD64 RPM)
 
       - name: Upload assets
-        id: upload-release-assets
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create-new-release.outputs.upload_url }}
-          asset_path: neovim/build/${{ steps.build-nvim-rpm-pkg.outputs.rpm_file }}
-          asset_name: nvim-${{ steps.parse-version-number.outputs.version_number }}-stable-linux-amd64.rpm
+          asset_path: ${{ env.RPM_FILE }}
+          asset_name: neovim-${{ env.VERSION }}-1.x86_64.rpm
           asset_content_type: application/x-rpm
 
       - name: Verify uploaded asset
         run: |
           asset_url=$(curl -s ${{ steps.create-new-release.outputs.upload_url }} | jq -r '.assets[0].browser_download_url')
           curl -LO $asset_url
-          file nvim-*.rpm
-          rpm -qip nvim-*.rpm || echo "Failed to query downloaded RPM file"
+          file neovim-*.rpm
+          rpm -qip neovim-*.rpm || echo "Failed to query downloaded RPM file"
