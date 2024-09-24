@@ -14,7 +14,8 @@ jobs:
       - name: Install Prerequisites
         run: |
           dnf install -y epel-release
-          dnf install -y rpm-build wget curl jq make cmake gcc unzip gettext ninja-build libtool autoconf automake pkg-config
+          dnf config-manager --set-enabled powertools
+          dnf install -y rpm-build wget curl jq make cmake gcc unzip gettext libtool autoconf automake pkg-config ninja-build
 
       - name: Set up RPM build environment
         run: |
@@ -39,7 +40,7 @@ jobs:
           URL:            https://neovim.io/
           Source0:        %{name}-stable.tar.gz
 
-          BuildRequires:  make cmake gcc unzip gettext ninja-build libtool autoconf automake pkg-config
+          BuildRequires:  make cmake gcc unzip gettext libtool autoconf automake pkg-config ninja-build
 
           %description
           Neovim is a project that seeks to aggressively refactor Vim in order to:
