@@ -40,7 +40,7 @@ jobs:
         run: |
           cat << EOF > ~/rpmbuild/SPECS/neovim.spec
           Name:           neovim
-          Version:        ${{ env.VERSION }}
+          Version:        ${{ steps.parse-version-number.outputs.VERSION }}
           Release:        1%{?dist}
           Summary:        Vim-fork focused on extensibility and usability
 
@@ -75,7 +75,7 @@ jobs:
           %{_datadir}/nvim
 
           %changelog
-          * $(date "+%a %b %d %Y") GitHub Action <github-action@example.com> - ${{ env.VERSION }}-1
+          * $(date "+%a %b %d %Y") GitHub Action - ${{ steps.parse-version-number.outputs.VERSION }}
           - Automated RPM build
           EOF
 
@@ -98,8 +98,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: nvim-${{ env.VERSION }}-stable-linux-amd64-rpm
-          release_name: Neovim ${{ env.VERSION }} Stable (Linux AMD64 RPM)
+          tag_name: nvim-${{ steps.parse-version-number.outputs.VERSION }}-stable-linux-amd64-rpm
+          release_name: Neovim ${{ steps.parse-version-number.outputs.VERSION }} Stable (Linux AMD64 RPM)
 
       - name: Upload assets
         uses: actions/upload-release-asset@v1
@@ -108,7 +108,7 @@ jobs:
         with:
           upload_url: ${{ steps.create-new-release.outputs.upload_url }}
           asset_path: ${{ env.RPM_FILE }}
-          asset_name: neovim-${{ env.VERSION }}-1.x86_64.rpm
+          asset_name: neovim-${{ steps.parse-version-number.outputs.VERSION }}-amd64.rpm
           asset_content_type: application/x-rpm
 
       - name: Verify uploaded asset
@@ -120,7 +120,7 @@ jobs:
 
           echo "Fetching release information..."
           release_info=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/nvim-${{ env.VERSION }}-stable-linux-amd64-rpm")
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/nvim-${{ steps.parse-version-number.outputs.VERSION }}-stable-linux-amd64-rpm")
           
           echo "Extracting asset URL..."
           asset_url=$(echo "$release_info" | jq -r '.assets[0].browser_download_url')
