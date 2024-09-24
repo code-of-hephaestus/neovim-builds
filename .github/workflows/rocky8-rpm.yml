@@ -113,7 +113,15 @@ jobs:
         run: |
           dnf install -y 'dnf-command(config-manager)'
           dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
-          dnf install -y gh
+          dnf install -y gh git
+
+      - name: Initialize Git repository
+        run: |
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git init
+          git add .
+          git commit -m "Initial commit"
 
       - name: Create Github release and upload asset
         env:
