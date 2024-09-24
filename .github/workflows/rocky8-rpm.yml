@@ -35,8 +35,9 @@ jobs:
       - name: Parse version number
         id: parse-version-number
         run: |
-          version=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.body' | head -5 | grep -oE "v[0-9]+.[0-9].+[0-9]+")
+          version=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.body' | head -5 | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+" | sed 's/^v//')
           echo "VERSION=$version" >> $GITHUB_OUTPUT
+          echo "Parsed version: $version"
 
       - name: Create RPM spec file
         run: |
@@ -66,6 +67,7 @@ jobs:
           make CMAKE_BUILD_TYPE=Release
 
           %install
+          rm -rf $RPM_BUILD_ROOT
           mkdir -p %{buildroot}%{_bindir}
           mkdir -p %{buildroot}%{_datadir}/nvim
           cp build/bin/nvim %{buildroot}%{_bindir}/
@@ -80,11 +82,24 @@ jobs:
           - Automated RPM build
           EOF
 
+      - name: Display spec file
+        run: cat ~/rpmbuild/SPECS/neovim.spec
+
       - name: Build RPM package
         id: build-rpm-package
         run: |
           rpmbuild -ba ~/rpmbuild/SPECS/neovim.spec
-          echo "RPM_FILE=$(ls ~/rpmbuild/RPMS/x86_64/neovim-*.rpm)" >> $GITHUB_OUTPUT
+          echo "RPM_FILE=$(find ~/rpmbuild/RPMS/x86_64/ -name 'neovim-*.rpm' ! -name '*debug*')" >> $GITHUB_OUTPUT
+
+      - name: Debug RPM build output
+        if: failure()
+        run: |
+          echo "Contents of ~/rpmbuild/RPMS:"
+          ls -R ~/rpmbuild/RPMS
+          echo "Contents of ~/rpmbuild/SRPMS:"
+          ls -R ~/rpmbuild/SRPMS
+          echo "Last 100 lines of rpmbuild.log:"
+          tail -n 100 ~/rpmbuild/BUILD/rpmbuild.log || echo "rpmbuild.log not found"
 
       - name: Display RPM info
         run: |
