@@ -80,6 +80,7 @@ jobs:
           EOF
 
       - name: Build RPM package
+        id: build-rpm-package
         run: |
           rpmbuild -ba ~/rpmbuild/SPECS/neovim.spec
           echo "RPM_FILE=$(ls ~/rpmbuild/RPMS/x86_64/neovim-*.rpm)" >> $GITHUB_OUTPUT
@@ -87,10 +88,10 @@ jobs:
       - name: Display RPM info
         run: |
           echo "RPM file details:"
-          file ${{ env.RPM_FILE }}
-          rpm -qip ${{ env.RPM_FILE }}
+          file ${{ steps.build-rpm-package.outputs.RPM_FILE }}
+          rpm -qip ${{ steps.build-rpm-package.outputs.RPM_FILE }}
           echo "RPM contents:"
-          rpm -qlp ${{ env.RPM_FILE }}
+          rpm -qlp ${{ steps.build-rpm-package.outputs.RPM_FILE }}
 
       - name: Create Github release
         id: create-new-release
@@ -107,7 +108,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create-new-release.outputs.upload_url }}
-          asset_path: ${{ env.RPM_FILE }}
+          asset_path: ${{ steps.build-rpm-package.outputs.RPM_FILE }}
           asset_name: neovim-${{ steps.parse-version-number.outputs.VERSION }}-amd64.rpm
           asset_content_type: application/x-rpm
 
