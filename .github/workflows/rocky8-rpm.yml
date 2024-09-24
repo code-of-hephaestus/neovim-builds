@@ -1,4 +1,4 @@
-name: Build Neovim .rpm Package
+name: Rocky8 Build Neovim .rpm Package
 
 on:
   workflow_dispatch:
