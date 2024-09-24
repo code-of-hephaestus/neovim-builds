@@ -82,7 +82,7 @@ jobs:
       - name: Build RPM package
         run: |
           rpmbuild -ba ~/rpmbuild/SPECS/neovim.spec
-          echo "RPM_FILE=$(ls ~/rpmbuild/RPMS/x86_64/neovim-*.rpm)" >> $GITHUB_ENV
+          echo "RPM_FILE=$(ls ~/rpmbuild/RPMS/x86_64/neovim-*.rpm)" >> $GITHUB_OUTPUT
 
       - name: Display RPM info
         run: |
