@@ -57,21 +57,12 @@ jobs:
           %install
           mkdir -p %{buildroot}%{_bindir}
           mkdir -p %{buildroot}%{_datadir}/nvim
-          mkdir -p %{buildroot}%{_mandir}/man1
           cp build/bin/nvim %{buildroot}%{_bindir}/
           cp -r runtime/* %{buildroot}%{_datadir}/nvim/
-          if [ -f build/man/nvim.1 ]; then
-            cp build/man/nvim.1 %{buildroot}%{_mandir}/man1/
-          elif [ -f man/nvim.1 ]; then
-            cp man/nvim.1 %{buildroot}%{_mandir}/man1/
-          fi
 
           %files
           %{_bindir}/nvim
           %{_datadir}/nvim
-          %if 0%{?_mandir:1}
-          %{_mandir}/man1/nvim.1*
-          %endif
 
           %changelog
           * $(date "+%a %b %d %Y") GitHub Action <github-action@example.com> - ${{ env.VERSION }}-1
@@ -88,6 +79,8 @@ jobs:
           echo "RPM file details:"
           file ${{ env.RPM_FILE }}
           rpm -qip ${{ env.RPM_FILE }}
+          echo "RPM contents:"
+          rpm -qlp ${{ env.RPM_FILE }}
 
       - name: Create Github release
         id: create-new-release
@@ -114,3 +107,4 @@ jobs:
           curl -LO $asset_url
           file neovim-*.rpm
           rpm -qip neovim-*.rpm || echo "Failed to query downloaded RPM file"
+          rpm -qlp neovim-*.rpm || echo "Failed to list contents of downloaded RPM file"
