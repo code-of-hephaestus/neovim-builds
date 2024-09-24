@@ -143,14 +143,34 @@ jobs:
           echo "Waiting for asset to be processed..."
           sleep 15
 
+          echo "Fetching release information..."
+          release_info=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/nvim-${{ steps.parse-version-number.outputs.VERSION }}-stable-linux-amd64-rpm")
+          
+          echo "Extracting asset URL..."
+          asset_url=$(echo "$release_info" | jq -r '.assets[0].browser_download_url')
+          
+          if [ -z "$asset_url" ]; then
+            echo "Failed to retrieve asset URL. Release info:"
+            echo "$release_info" | jq .
+            exit 1
+          fi
+          
+          echo "Asset URL: $asset_url"
+          
           echo "Downloading asset..."
-          gh release download "nvim-${{ steps.parse-version-number.outputs.VERSION }}-stable-linux-amd64-rpm" -p '*.rpm'
-
+          curl -L -o neovim.rpm "$asset_url"
+          
+          if [ ! -f neovim.rpm ]; then
+            echo "Failed to download the RPM file"
+            exit 1
+          fi
+          
           echo "File details:"
-          file *.rpm
-
+          file neovim.rpm
+          
           echo "RPM query info:"
-          rpm -qip *.rpm || echo "Failed to query downloaded RPM file"
-
+          rpm -qip neovim.rpm || echo "Failed to query downloaded RPM file"
+          
           echo "RPM contents:"
-          rpm -qlp *.rpm || echo "Failed to list contents of downloaded RPM file"
+          rpm -qlp neovim.rpm || echo "Failed to list contents of downloaded RPM file"
