@@ -17,27 +17,7 @@ jobs:
           dnf config-manager --set-enabled powertools
           dnf install -y rpm-build wget curl jq make cmake gcc gcc-c++ unzip gettext libtool autoconf automake pkg-config ninja-build \
               luajit luajit-devel lua lua-devel libuv-devel unibilium-devel libtermkey-devel libvterm-devel \
-              msgpack-devel gperf git
-
-      - name: Build and install libluv
-        run: |
-          git clone https://github.com/luvit/luv.git
-          cd luv
-          mkdir build
-          cd build
-          cmake .. -DWITH_SHARED_LIBUV=ON -DLUA_BUILD_TYPE=System
-          make
-          make install
-          echo "/usr/local/lib64" > /etc/ld.so.conf.d/local.conf
-          ldconfig
-
-      - name: Build and install tree-sitter
-        run: |
-          git clone https://github.com/tree-sitter/tree-sitter.git
-          cd tree-sitter
-          make
-          make install
-          ldconfig
+              msgpack-devel
 
       - name: Set up RPM build environment
         run: |
@@ -69,7 +49,7 @@ jobs:
 
           BuildRequires:  make cmake gcc gcc-c++ unzip gettext libtool autoconf automake pkg-config ninja-build
           BuildRequires:  luajit-devel lua-devel libuv-devel unibilium-devel libtermkey-devel libvterm-devel
-          BuildRequires:  msgpack-devel gperf
+          BuildRequires:  msgpack-devel
 
           Requires:       luajit libuv unibilium libtermkey libvterm msgpack
 
@@ -88,7 +68,6 @@ jobs:
           cd build
           cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo \
                 -DCMAKE_INSTALL_PREFIX=/usr \
-                -DENABLE_JEMALLOC=OFF \
                 ..
           make %{?_smp_mflags}
 
