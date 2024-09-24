@@ -13,8 +13,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y rpm build-essential wget
-          # Install build dependencies
-          sudo apt-get install -y cmake gcc gettext make unzip
+          sudo apt-get install -y cmake gcc gettext make unzip ninja-build libtool libtool-bin autoconf automake pkg-config gettext
 
       - name: Set up RPM build environment
         run: |
@@ -39,7 +38,8 @@ jobs:
           URL:            https://neovim.io/
           Source0:        %{name}-stable.tar.gz
 
-          BuildRequires:  make, cmake, gcc, unzip, gettext
+          # Disable automatic dependency processing
+          AutoReqProv: no
 
           %description
           Neovim is a project that seeks to aggressively refactor Vim in order to:
