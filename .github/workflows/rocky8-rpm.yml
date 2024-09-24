@@ -17,7 +17,19 @@ jobs:
           dnf config-manager --set-enabled powertools
           dnf install -y rpm-build wget curl jq make cmake gcc gcc-c++ unzip gettext libtool autoconf automake pkg-config ninja-build \
               luajit luajit-devel lua lua-devel libuv-devel unibilium-devel libtermkey-devel libvterm-devel \
-              msgpack-devel
+              msgpack-devel git
+
+      - name: Build and install luv
+        run: |
+          git clone https://github.com/luvit/luv.git
+          cd luv
+          mkdir build
+          cd build
+          cmake .. -DWITH_SHARED_LIBUV=ON -DLUA_BUILD_TYPE=System -DCMAKE_BUILD_TYPE=Release
+          make
+          make install
+          echo "/usr/local/lib64" > /etc/ld.so.conf.d/local.conf
+          ldconfig
 
       - name: Set up RPM build environment
         run: |
@@ -68,6 +80,7 @@ jobs:
           cd build
           cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo \
                 -DCMAKE_INSTALL_PREFIX=/usr \
+                -DCMAKE_PREFIX_PATH=/usr/local \
                 ..
           make %{?_smp_mflags}
 
