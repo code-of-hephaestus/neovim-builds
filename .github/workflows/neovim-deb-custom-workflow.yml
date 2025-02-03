@@ -1,4 +1,4 @@
-name: Build Neovim .deb Package
+name: [Custom Workflow] Build Neovim .deb Package
 
 on:
   push:
