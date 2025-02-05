@@ -39,8 +39,8 @@ jobs:
       - name: check deb file path
         id: check-deb-file-path
         run: |
-          pwd
-          ls -al
+          cd neovim/build
+          ls -al "*.deb"
 
       - name: Parse release info
         id: parse-release-info
