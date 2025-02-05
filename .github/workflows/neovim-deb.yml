@@ -36,12 +36,6 @@ jobs:
           deb_file=$(realpath nvim-linux-amd64.deb)
           echo "deb_file=$deb_file" >> $GITHUB_OUTPUT
 
-      - name: check deb file path
-        id: check-deb-file-path
-        run: |
-          cd neovim/build
-          ls -al "*.deb"
-
       - name: Parse release info
         id: parse-release-info
         run: |
