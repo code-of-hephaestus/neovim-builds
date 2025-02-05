@@ -24,23 +24,13 @@ jobs:
       - name: Checkout Neovim Repository and build
         id: build-nvim-deb-pkg
         run: |
-          git clone https://github.com/neovim/neovim && cd neovim
+          git clone https://github.com/neovim/neovim
+          cd neovim
           git checkout stable
-          version=$(git describe --tag --abbrev=0 | sed 's/^v//')
-          mkdir -p build && cd build
-          cmake -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCPACK_PACKAGE_FILE_NAME="nvim-${version}-linux-x86_64" \
-            ..
-          ninja
-          cpack -G DEB
-          deb_file=$(realpath "nvim-${version}-linux-x86_64.deb")
-          if [ ! -f "$deb_file" ]; then
-            echo "DEB package not found at expected location"
-            exit 1
-          fi
+          make CMAKE_BUILD_TYPE=Release
+          cd build && cpack -G DEB
+          deb_file=$(realpath nvim-linux64.deb)
           echo "deb_file=$deb_file" >> $GITHUB_OUTPUT
-          echo "version=$version" >> $GITHUB_OUTPUT
 
       - name: Parse release info
         id: parse-release-info
