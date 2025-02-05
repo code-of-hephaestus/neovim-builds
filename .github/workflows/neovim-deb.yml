@@ -34,8 +34,24 @@ jobs:
           liblua5.1-0-dev \
           luajit \
           libluajit-5.1-dev \
-          libuv1-dev \
-          libluv-dev
+          libuv1-dev
+
+      - name: Build and Install Luv
+        id: build-luv
+        run: |
+          git clone https://github.com/luvit/luv.git
+          cd luv
+          git checkout 1.44.2-1  # Using a stable version
+          mkdir -p build
+          cd build
+          cmake -DWITH_SHARED_LIBUV=ON \
+                -DLUA_BUILD_TYPE=System \
+                -DBUILD_MODULE=OFF \
+                -DBUILD_SHARED_LIBS=ON \
+                ..
+          make
+          sudo make install
+          sudo ldconfig
 
       - name: Checkout Neovim Repository and build
         id: build-nvim-deb-pkg
