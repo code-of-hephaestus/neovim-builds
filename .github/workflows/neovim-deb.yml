@@ -32,8 +32,8 @@ jobs:
           deb_file=$(realpath nvim-linux64.deb)
           echo "deb_file=$deb_file" >> $GITHUB_OUTPUT
 
-      - name: Parse release info
-        id: parse-release-info
+      - name: Get Release Info
+        id: release_info
         run: |
           release_info=$(curl -sL -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/neovim/neovim/releases/tags/stable)
@@ -41,8 +41,14 @@ jobs:
             echo "Failed to fetch release info"
             exit 1
           fi
+          
           body=$(echo "$release_info" | jq -r '.body')
-          echo "release_info=$body" >> $GITHUB_OUTPUT
+          # Using heredoc to handle multi-line output properly
+          cat << 'EOF' >> $GITHUB_OUTPUT
+          release_info<<EOF_DELIMITER
+          $body
+          EOF_DELIMITER
+          EOF
 
       - name: Create Github release
         id: create-new-release
