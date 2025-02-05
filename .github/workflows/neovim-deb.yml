@@ -3,6 +3,10 @@ name: Build Neovim .deb Package
 on:
   workflow_dispatch:
 
+env:
+  ACTIONS_RUNNER_DEBUG: true
+  ACTIONS_STEP_DEBUG: true
+
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -31,6 +35,11 @@ jobs:
           cd build && cpack -G DEB
           deb_file=$(realpath nvim-linux64.deb)
           echo "deb_file=$deb_file" >> $GITHUB_OUTPUT
+
+      - name: check deb file path
+        id: check-deb-file-path
+        run: |
+          ls -al *.deb
 
       - name: Parse release info
         id: parse-release-info
