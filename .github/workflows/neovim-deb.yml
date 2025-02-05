@@ -33,7 +33,7 @@ jobs:
           git checkout stable
           make CMAKE_BUILD_TYPE=Release
           cd build && cpack -G DEB -D CPACK_PACKAGE_FILE_NAME="nvim-stable-linux-amd64"
-          deb_file=$(realpath nvim-linux-amd64.deb)
+          deb_file=$(realpath nvim-stable-linux-amd64)
           echo "deb_file=$deb_file" >> $GITHUB_OUTPUT
 
       - name: Parse release info
