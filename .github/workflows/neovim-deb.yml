@@ -17,6 +17,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install ninja-build gettext cmake unzip curl
           sudo apt-get install build-essential binutils lintian debhelper dh-make devscripts
+      
       - name: Checkout Neovim Repository and build
         id: build-nvim-deb-pkg
         run: |
@@ -24,18 +25,21 @@ jobs:
           git checkout stable
           make CMAKE_BUILD_TYPE=Release
           cd build && cpack -G DEB
-          deb_file=$(realpath nvim-linux64.deb)
+          deb_file=$(realpath nvim-linux-x86_64.deb)
           echo "deb_file=$deb_file" >> $GITHUB_OUTPUT
+      
       - name: Parse release info
         id: parse-release-info
         run: |
           release_info=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.body' | head -5)
           echo "$release_info"
+      
       - name: Parse version number
         id: parse-version-number
         run: |
           version_number=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.body' | head -5 | grep -oE "v[0-9]+.[0-9].+[0-9]+")
           echo "version_number=$version_number" >> $GITHUB_OUTPUT
+      
       - name: Create Github release
         id: create-new-release
         uses: actions/create-release@v1
@@ -44,6 +48,7 @@ jobs:
         with:
           tag_name: nvim-${{ steps.parse-version-number.outputs.version_number }}-stable-linux-amd64
           release_name: nvim-${{ steps.parse-version-number.outputs.version_number }}-stable-linux-amd64
+      
       - name: Upload assets
         id: upload-release-assets
         uses: actions/upload-release-asset@v1
