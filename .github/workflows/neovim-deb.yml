@@ -41,6 +41,11 @@ jobs:
         run: |
           release_info=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.body' | head -5)
           echo "$release_info"
+          {
+            echo "release_info<<EOL"
+            echo "$release_info"
+            echo "EOL"
+          } >> "$GITHUB_OUTPUT"
       
       - name: Parse version number
         id: parse-version-number
@@ -54,8 +59,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: nvim-${{ steps.build-nvim-deb-pkg.outputs.version_number }}-stable-linux-amd64
-          name: nvim-${{ steps.build-nvim-deb-pkg.outputs.version_number }}-stable-linux-amd64
+          tag_name: nvim-${{ steps.parse-version-number.outputs.version_number }}-stable-linux-amd64
+          name: nvim-${{ steps.parse-version-number.outputs.version_number }}-stable-linux-amd64
           body: ${{ steps.parse-release-info.outputs.release_info }}
           files: ${{ steps.build-nvim-deb-pkg.outputs.deb_file }}
       
