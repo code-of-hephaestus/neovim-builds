@@ -1,152 +1,84 @@
 name: Build Neovim .rpm Package
 
 on:
+  # Trigger the workflow manually from the Actions tab
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Although the job is defined on an Ubuntu runner, we run it inside a Fedora container
+    runs-on: ubuntu-24.04
+    container:
+      image: fedora:latest
     permissions:
       contents: write
     steps:
-      - name: Install Prerequisites
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y rpm build-essential wget
-          sudo apt-get install -y cmake gcc gettext make unzip ninja-build libtool libtool-bin autoconf automake pkg-config gettext
+      # Check out this repository (to get the spec file, etc.)
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
+      # Install the build tools and other dependencies inside the Fedora container
+      - name: Install build prerequisites
+        run: |
+          dnf install -y rpm-build rpmdevtools cmake ninja-build libtool pkgconfig curl make gcc git jq
+
+      # Set up the standard RPM build tree (~/.rpmbuild)
       - name: Set up RPM build environment
-        run: |
-          mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
-          echo '%_topdir %(echo $HOME)/rpmbuild' > ~/.rpmmacros
+        run: rpmdev-setuptree
 
-      - name: Download and prepare Neovim source
+      # Download the stable tarball from the Neovim GitHub repository and move it to the SOURCES folder
+      - name: Get Neovim stable source tarball
         run: |
-          wget https://github.com/neovim/neovim/archive/refs/tags/stable.tar.gz -O ~/rpmbuild/SOURCES/neovim-stable.tar.gz
-      
+          wget https://github.com/neovim/neovim/archive/refs/tags/stable.tar.gz -O neovim-stable.tar.gz
+          mv neovim-stable.tar.gz ~/rpmbuild/SOURCES/neovim-stable.tar.gz
+
+      # Copy your spec file (assumed to be at packaging/rpm/neovim.spec) into the SPECS directory
+      - name: Copy spec file
+        run: cp packaging/rpm/neovim.spec ~/rpmbuild/SPECS/neovim.spec
+
+      # Build the RPM package using rpmbuild. The spec file should know how to unpack the tarball,
+      # configure, build, and install Neovim into the RPM build root.
+      - name: Build RPM package
+        id: build-rpm
+        run: |
+          rpmbuild -ba ~/rpmbuild/SPECS/neovim.spec
+          # Locate the built RPM package. Adjust the find pattern if necessary.
+          rpm_file=$(find ~/rpmbuild/RPMS/ -name "*.rpm" | head -n 1)
+          echo "rpm_file=${rpm_file}" >> "$GITHUB_OUTPUT"
+
+      # Retrieve release information from Neovim’s stable release via GitHub’s API (adjust as needed)
       - name: Parse release info
         id: parse-release-info
         run: |
           release_info=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.body' | head -5)
-          echo "$release_info"
-      
+          echo "release_info=${release_info}" >> "$GITHUB_OUTPUT"
+
+      # Extract a version number (for example, something like "v0.9.0") from the release info.
       - name: Parse version number
         id: parse-version-number
         run: |
-          version=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.body' | head -5 | grep -oE "v[0-9]+.[0-9].+[0-9]+")
-          echo "VERSION=$version" >> $GITHUB_OUTPUT
+          version_number=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.body' | head -5 | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+")
+          echo "version_number=${version_number}" >> "$GITHUB_OUTPUT"
 
-      - name: Create RPM spec file
-        run: |
-          cat << EOF > ~/rpmbuild/SPECS/neovim.spec
-          Name:           neovim
-          Version:        ${{ steps.parse-version-number.outputs.VERSION }}
-          Release:        1%{?dist}
-          Summary:        Vim-fork focused on extensibility and usability
-
-          License:        Apache-2.0
-          URL:            https://neovim.io/
-          Source0:        %{name}-stable.tar.gz
-
-          # Disable automatic dependency processing
-          AutoReqProv: no
-
-          %description
-          Neovim is a project that seeks to aggressively refactor Vim in order to:
-          - Simplify maintenance and encourage contributions
-          - Split the work between multiple developers
-          - Enable advanced UIs without modifications to the core
-          - Maximize extensibility
-
-          %prep
-          %setup -q -n %{name}-stable
-
-          %build
-          make CMAKE_BUILD_TYPE=Release
-
-          %install
-          mkdir -p %{buildroot}%{_bindir}
-          mkdir -p %{buildroot}%{_datadir}/nvim
-          cp build/bin/nvim %{buildroot}%{_bindir}/
-          cp -r runtime/* %{buildroot}%{_datadir}/nvim/
-
-          %files
-          %{_bindir}/nvim
-          %{_datadir}/nvim
-
-          %changelog
-          * $(date "+%a %b %d %Y") GitHub Action - ${{ steps.parse-version-number.outputs.VERSION }}
-          - Automated RPM build
-          EOF
-
-      - name: Build RPM package
-        id: build-rpm-package
-        run: |
-          rpmbuild -ba ~/rpmbuild/SPECS/neovim.spec
-          echo "RPM_FILE=$(ls ~/rpmbuild/RPMS/x86_64/neovim-*.rpm)" >> $GITHUB_OUTPUT
-
-      - name: Display RPM info
-        run: |
-          echo "RPM file details:"
-          file ${{ steps.build-rpm-package.outputs.RPM_FILE }}
-          rpm -qip ${{ steps.build-rpm-package.outputs.RPM_FILE }}
-          echo "RPM contents:"
-          rpm -qlp ${{ steps.build-rpm-package.outputs.RPM_FILE }}
-
-      - name: Create Github release
+      # Create a GitHub release. The tag and release name include the version number.
+      - name: Create GitHub release
         id: create-new-release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: nvim-${{ steps.parse-version-number.outputs.VERSION }}-stable-linux-amd64-rpm
-          release_name: Neovim ${{ steps.parse-version-number.outputs.VERSION }} Stable (Linux AMD64 RPM)
+          tag_name: nvim-${{ steps.parse-version-number.outputs.version_number }}-stable-linux-amd64
+          release_name: nvim-${{ steps.parse-version-number.outputs.version_number }}-stable-linux-amd64
+          body: ${{ steps.parse-release-info.outputs.release_info }}
 
-      - name: Upload assets
+      # Upload the generated RPM package as a release asset
+      - name: Upload release asset
+        id: upload-release-assets
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create-new-release.outputs.upload_url }}
-          asset_path: ${{ steps.build-rpm-package.outputs.RPM_FILE }}
-          asset_name: neovim-${{ steps.parse-version-number.outputs.VERSION }}-amd64.rpm
+          asset_path: ${{ steps.build-rpm.outputs.rpm_file }}
+          asset_name: nvim-${{ steps.parse-version-number.outputs.version_number }}-stable-linux-amd64.rpm
           asset_content_type: application/x-rpm
-
-      - name: Verify uploaded asset
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Waiting for asset to be processed..."
-          sleep 15
-
-          echo "Fetching release information..."
-          release_info=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/nvim-${{ steps.parse-version-number.outputs.VERSION }}-stable-linux-amd64-rpm")
-          
-          echo "Extracting asset URL..."
-          asset_url=$(echo "$release_info" | jq -r '.assets[0].browser_download_url')
-          
-          if [ -z "$asset_url" ]; then
-            echo "Failed to retrieve asset URL. Release info:"
-            echo "$release_info" | jq .
-            exit 1
-          fi
-          
-          echo "Asset URL: $asset_url"
-          
-          echo "Downloading asset..."
-          curl -L -o neovim.rpm "$asset_url"
-          
-          if [ ! -f neovim.rpm ]; then
-            echo "Failed to download the RPM file"
-            exit 1
-          fi
-          
-          echo "File details:"
-          file neovim.rpm
-          
-          echo "RPM query info:"
-          rpm -qip neovim.rpm || echo "Failed to query downloaded RPM file"
-          
-          echo "RPM contents:"
-          rpm -qlp neovim.rpm || echo "Failed to list contents of downloaded RPM file"
