@@ -33,7 +33,9 @@ jobs:
           lua5.1 \
           liblua5.1-0-dev \
           luajit \
-          libluajit-5.1-dev
+          libluajit-5.1-dev \
+          libuv1-dev \
+          libluv-dev
 
       - name: Checkout Neovim Repository and build
         id: build-nvim-deb-pkg
