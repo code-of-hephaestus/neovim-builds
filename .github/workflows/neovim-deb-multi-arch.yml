@@ -103,18 +103,28 @@ jobs:
       - name: Configure build
         run: |
           cd neovim
-          mkdir -p build
 
           if [[ "${{ github.event.inputs.arch }}" == "aarch64" ]]; then
-            # Cross-compilation: use bundled dependencies and static linking
+            # Cross-compilation: two-stage build process
+            # Stage 1: Build bundled dependencies
+            echo "Building bundled dependencies for aarch64..."
+            cmake -S cmake.deps -B .deps \
+              -G Ninja \
+              -DCMAKE_TOOLCHAIN_FILE=../aarch64-toolchain.cmake \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DUSE_BUNDLED=ON
+
+            cmake --build .deps --parallel $(nproc)
+
+            # Stage 2: Build Neovim itself
+            echo "Building Neovim for aarch64..."
             cmake -B build \
               -G Ninja \
               -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_TOOLCHAIN_FILE=../aarch64-toolchain.cmake \
-              -DUSE_BUNDLED=ON \
               -DCPACK_DEBIAN_PACKAGE_ARCHITECTURE=arm64
           else
-            # Native amd64: use system dependencies
+            # Native amd64: single-stage build with system dependencies
             cmake -B build \
               -G Ninja \
               -DCMAKE_BUILD_TYPE=Release \
@@ -126,6 +136,7 @@ jobs:
         id: build
         run: |
           cd neovim
+          # Build the main Neovim binary (dependencies already built in configure step for aarch64)
           cmake --build build --parallel $(nproc)
 
       - name: Verify binary architecture

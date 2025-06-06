@@ -43,21 +43,24 @@ This workflow implements **cross-compilation** for Neovim using the canonical Ub
 
 1. **Cross-Compiler Toolchain Only**: Install `gcc-aarch64-linux-gnu` and related tools without adding foreign architectures
 2. **Host Dependencies**: Install build-time tools that run on the build system (x86_64): `lua5.1`, `cmake`, `ninja-build`
-3. **Natural Package Search Failure**: CMake searches for target packages in `/usr/aarch64-linux-gnu` (empty), fails naturally
-4. **Bundled Fallback**: `-DUSE_BUNDLED=ON` kicks in when system packages aren't found, building all dependencies from source
-5. **Static Linking**: Dependencies are built and linked statically, creating self-contained binaries
-6. **CMake Toolchain File**: Specifies cross-compiler and restricts package searches to target-only paths
+3. **Two-Stage Build Process**:
+   - **Stage 1**: Build bundled dependencies using `cmake.deps/` with cross-compiler
+   - **Stage 2**: Build Neovim itself, which finds the pre-built dependencies
+4. **Static Linking**: Dependencies are built and linked statically, creating self-contained binaries
+5. **CMake Toolchain File**: Specifies cross-compiler and restricts package searches to target-only paths
 
-**Key Flow**:
-1. CMake attempts to find system packages for aarch64 → fails (no packages installed)
-2. `USE_BUNDLED=ON` activates → builds LuaJIT, libuv, etc. from source using cross-compiler
-3. All dependencies are compiled for aarch64 and statically linked
+**Key Build Flow**:
+1. **Dependencies**: `cmake -S cmake.deps -B .deps -DCMAKE_TOOLCHAIN_FILE=aarch64-toolchain.cmake -DUSE_BUNDLED=ON`
+2. **Build deps**: `cmake --build .deps` (builds LuaJIT, libuv, etc. for aarch64)
+3. **Main build**: `cmake -B build -DCMAKE_TOOLCHAIN_FILE=aarch64-toolchain.cmake` (finds pre-built deps)
+4. **Build Neovim**: `cmake --build build` (links everything into final aarch64 binary)
 
 **Key Distinction**:
 - **Host dependencies** (like `lua5.1`) run on the build machine during compilation
-- **Target dependencies** (like LuaJIT) are compiled for the target architecture and bundled into the binary
+- **Target dependencies** (like LuaJIT) are compiled for the target architecture in stage 1
+- **Main binary** links pre-built target dependencies in stage 2
 
-This approach follows the **canonical cross-compilation pattern** where CMake naturally falls back to bundled dependencies when system packages aren't available for the target architecture.
+This approach follows the **canonical Neovim cross-compilation pattern** documented in the official BUILD.md, where dependencies are built separately before the main build.
 
 ### CMake Toolchain Configuration
 
@@ -242,29 +245,36 @@ cat aarch64-toolchain.cmake | grep CMAKE_C_COMPILER
 cat aarch64-toolchain.cmake | grep CMAKE_SYSTEM_PROCESSOR
 cat aarch64-toolchain.cmake | grep CMAKE_FIND_ROOT_PATH_MODE
 
-# Verify bundled dependencies configuration
-cmake -L build/ | grep USE_BUNDLED  # Should show ON for cross-compilation
-
 # Test cross-compilation simple program
 echo 'int main(){return 0;}' > test.c
 aarch64-linux-gnu-gcc test.c -o test.arm64
 file test.arm64  # Should show ARM aarch64
 
-# Check CMake detection and find root path
-cmake -B test-build -DCMAKE_TOOLCHAIN_FILE=aarch64-toolchain.cmake
-grep "CMAKE_SYSTEM_PROCESSOR" test-build/CMakeCache.txt  # Should show aarch64
-grep "CMAKE_FIND_ROOT_PATH" test-build/CMakeCache.txt    # Should show /usr/aarch64-linux-gnu
+# Verify two-stage build process
+cd neovim
+ls -la .deps/  # Should exist after stage 1 (dependency build)
+ls -la .deps/usr/lib/  # Should contain built dependencies (libuv, luajit, etc.)
+ls -la build/  # Should exist after stage 2 (main build)
 
-# Verify package searches fail naturally (leading to bundled builds)
-cmake -B test-build -DCMAKE_TOOLCHAIN_FILE=aarch64-toolchain.cmake --debug-find 2>&1 | grep "Could NOT find"
-# Should show packages not found (this is good - triggers bundled fallback)
+# Check dependency build outputs
+find .deps/ -name "*.a" | head -5  # Should show static libraries
+find .deps/ -name "luajit*"        # Should show LuaJIT executable
+find .deps/ -name "*libuv*"        # Should show libuv library
+
+# Verify final binary architecture
+file build/bin/nvim  # Should show ARM aarch64, not x86-64
+
+# Check CMake cache for dependency paths
+grep "DEPS_PREFIX" build/CMakeCache.txt  # Should point to .deps/usr
 ```
 
 ### Performance Considerations
 
 - **Build Time**:
   - amd64 (system deps): ~8-12 minutes
-  - aarch64 (bundled deps): ~20-30 minutes (compiles all dependencies from source)
+  - aarch64 (two-stage bundled): ~25-40 minutes
+    - Stage 1 (dependencies): ~15-25 minutes (LuaJIT, libuv, tree-sitter, etc.)
+    - Stage 2 (main binary): ~10-15 minutes
 - **Artifact Size**:
   - amd64: ~8-12MB .deb package (dynamic linking)
   - aarch64: ~15-25MB .deb package (static/bundled dependencies)
