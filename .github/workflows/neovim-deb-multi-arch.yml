@@ -23,16 +23,62 @@ jobs:
     permissions:
       contents: write
     concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}
+      group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.inputs.arch }}
       cancel-in-progress: true
 
     steps:
-      - name: Install prerequisites
+      - name: Install base prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build gettext cmake unzip curl \
-              build-essential binutils lintian debhelper dh-make devscripts \
-              gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          sudo apt-get install -y \
+            ninja-build gettext cmake unzip curl \
+            build-essential binutils lintian debhelper \
+            dh-make devscripts pkg-config
+
+      - name: Install cross-compilation toolchain (aarch64)
+        if: ${{ github.event.inputs.arch == 'aarch64' }}
+        run: |
+          sudo apt-get install -y \
+            gcc-aarch64-linux-gnu \
+            g++-aarch64-linux-gnu \
+            pkg-config-aarch64-linux-gnu
+
+      - name: Setup aarch64 sysroot and dependencies
+        if: ${{ github.event.inputs.arch == 'aarch64' }}
+        run: |
+          # Add aarch64 architecture
+          sudo dpkg --add-architecture arm64
+
+          # Add Ubuntu Ports repositories for arm64 packages
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ noble main universe" | \
+            sudo tee /etc/apt/sources.list.d/arm64.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ noble-updates main universe" | \
+            sudo tee -a /etc/apt/sources.list.d/arm64.list
+
+          sudo apt-get update
+
+          # Install aarch64 runtime dependencies
+          sudo apt-get install -y \
+            libuv1-dev:arm64 \
+            libmsgpackc-dev:arm64 \
+            libtermkey-dev:arm64 \
+            libvterm-dev:arm64 \
+            libluajit-5.1-dev:arm64 \
+            lua5.1:arm64 \
+            libtree-sitter-dev:arm64 \
+            gettext:arm64
+
+      - name: Install amd64 dependencies
+        if: ${{ github.event.inputs.arch == 'amd64' }}
+        run: |
+          sudo apt-get install -y \
+            libuv1-dev \
+            libmsgpackc-dev \
+            libtermkey-dev \
+            libvterm-dev \
+            libluajit-5.1-dev \
+            lua5.1 \
+            libtree-sitter-dev
 
       - name: Checkout Neovim
         run: |
@@ -45,51 +91,148 @@ jobs:
           cat <<EOF > aarch64-toolchain.cmake
           set(CMAKE_SYSTEM_NAME Linux)
           set(CMAKE_SYSTEM_PROCESSOR aarch64)
+
+          # Specify the cross compiler
           set(CMAKE_C_COMPILER aarch64-linux-gnu-gcc)
           set(CMAKE_CXX_COMPILER aarch64-linux-gnu-g++)
+
+          # Specify the target environment for finding libraries and headers
+          set(CMAKE_FIND_ROOT_PATH /usr/aarch64-linux-gnu)
+
+          # Search for programs in the build host directories
           set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+          # Search for libraries and headers in the target directories
           set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
           set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+          set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+
+          # Configure pkg-config for cross-compilation
+          set(ENV{PKG_CONFIG_PATH} "")
+          set(ENV{PKG_CONFIG_LIBDIR} "/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig")
+          set(ENV{PKG_CONFIG_SYSROOT_DIR} "/")
           EOF
 
-      - name: Build Neovim
-        id: build
+      - name: Configure build
         run: |
           cd neovim
           mkdir -p build
 
           if [[ "${{ github.event.inputs.arch }}" == "aarch64" ]]; then
-            cmake -Bbuild -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=../aarch64-toolchain.cmake
+            cmake -B build \
+              -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_TOOLCHAIN_FILE=../aarch64-toolchain.cmake \
+              -DUSE_BUNDLED=OFF \
+              -DCPACK_DEBIAN_PACKAGE_ARCHITECTURE=arm64
           else
-            cmake -Bbuild -DCMAKE_BUILD_TYPE=Release
+            cmake -B build \
+              -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DUSE_BUNDLED=OFF \
+              -DCPACK_DEBIAN_PACKAGE_ARCHITECTURE=amd64
           fi
 
-          cmake --build build
+      - name: Build Neovim
+        id: build
+        run: |
+          cd neovim
+          cmake --build build --parallel $(nproc)
 
-          cd build
-          arch=${{ github.event.inputs.arch }}
-          cpack -G DEB -D CPACK_DEBIAN_PACKAGE_ARCHITECTURE=$arch \
-                -D CPACK_PACKAGE_FILE_NAME="nvim-stable-linux-$arch"
+      - name: Verify binary architecture
+        run: |
+          cd neovim
+          file build/bin/nvim
+          echo "Built binary architecture:"
+          if [[ "${{ github.event.inputs.arch }}" == "aarch64" ]]; then
+            # Should show ARM aarch64
+            file build/bin/nvim | grep -q "ARM aarch64" && echo "✓ aarch64 binary verified" || echo "✗ Expected aarch64, got different architecture"
+          else
+            # Should show x86-64
+            file build/bin/nvim | grep -q "x86-64" && echo "✓ amd64 binary verified" || echo "✗ Expected amd64, got different architecture"
+          fi
 
-          deb_file=$(realpath nvim-stable-linux-$arch.deb)
-          echo "deb_file=$deb_file" >> $GITHUB_OUTPUT
+      - name: Create .deb package
+        id: package
+        run: |
+          cd neovim/build
+
+          # Set architecture for package naming
+          if [[ "${{ github.event.inputs.arch }}" == "aarch64" ]]; then
+            pkg_arch="arm64"
+          else
+            pkg_arch="amd64"
+          fi
+
+          # Create .deb package
+          cpack -G DEB
+
+          # Find the generated .deb file
+          deb_file=$(find . -name "*.deb" -type f | head -1)
+          if [[ -z "$deb_file" ]]; then
+            echo "Error: No .deb file found"
+            exit 1
+          fi
+
+          # Rename to standard format
+          new_name="nvim-stable-linux-${{ github.event.inputs.arch }}.deb"
+          mv "$deb_file" "$new_name"
+
+          deb_file_path=$(realpath "$new_name")
+          echo "deb_file=$deb_file_path" >> $GITHUB_OUTPUT
+          echo "package_name=$new_name" >> $GITHUB_OUTPUT
+
+          # Display package info
+          echo "Created package: $new_name"
+          dpkg-deb --info "$new_name"
+
+      - name: Test package installation (amd64 only)
+        if: ${{ github.event.inputs.arch == 'amd64' }}
+        run: |
+          cd neovim/build
+          # Test that the package can be installed
+          sudo dpkg -i ${{ steps.package.outputs.package_name }} || true
+          sudo apt-get install -f -y  # Fix any dependency issues
+
+          # Verify installation
+          which nvim && nvim --version
 
       - name: Extract version
         id: version
         run: |
           version=$(cd neovim && git describe --tags --abbrev=0)
           echo "version_number=${version#v}" >> "$GITHUB_OUTPUT"
+          echo "Detected version: ${version#v}"
 
       - name: Create GitHub Release
         id: create_release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: nvim-v${{ steps.version.outputs.version_number }}-stable-linux-${{ github.event.inputs.arch }}
-          name: nvim-v${{ steps.version.outputs.version_number }}-stable-linux-${{ github.event.inputs.arch }}
+          name: Neovim v${{ steps.version.outputs.version_number }} (Linux ${{ github.event.inputs.arch }})
           body: |
-            NVIM v${{ steps.version.outputs.version_number }}
-            Build type: Release
-            Architecture: ${{ github.event.inputs.arch }}
+            ## Neovim v${{ steps.version.outputs.version_number }}
+
+            **Build Details:**
+            - Version: v${{ steps.version.outputs.version_number }}
+            - Build type: Release
+            - Architecture: ${{ github.event.inputs.arch }}
+            - Built from: `stable` branch
+            - Dependencies: System packages (Ubuntu 24.04)
+
+            **Installation:**
+            ```bash
+            # Download and install
+            wget https://github.com/${{ github.repository }}/releases/download/nvim-v${{ steps.version.outputs.version_number }}-stable-linux-${{ github.event.inputs.arch }}/${{ steps.package.outputs.package_name }}
+            sudo dpkg -i ${{ steps.package.outputs.package_name }}
+            sudo apt-get install -f  # Fix any dependency issues
+            ```
+
+            **Verification:**
+            ```bash
+            nvim --version
+            ```
           files: ${{ steps.build.outputs.deb_file }}
+          draft: false
+          prerelease: false
