@@ -75,6 +75,7 @@ set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)  # Use target headers
 - `cmake`, `ninja-build` - Build system
 - `gettext` - Internationalization
 - `gcc-aarch64-linux-gnu` - Cross-compiler toolchain
+- `pkg-config` - Library discovery (configured via environment variables)
 
 ## Output Artifacts
 
@@ -152,6 +153,13 @@ dpkg-deb --field nvim-stable-linux-aarch64.deb Depends
 ## Troubleshooting
 
 ### Common Build Failures
+
+**Symptom**: `E: Unable to locate package pkg-config-aarch64-linux-gnu`
+```bash
+# Diagnosis: Package name varies across Ubuntu versions
+# Solution: Use environment variables in CMake toolchain (already configured)
+# The PKG_CONFIG_* variables handle cross-compilation automatically
+```
 
 **Symptom**: `Package 'lua' not found`
 ```bash

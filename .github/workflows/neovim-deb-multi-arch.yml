@@ -40,8 +40,7 @@ jobs:
         run: |
           sudo apt-get install -y \
             gcc-aarch64-linux-gnu \
-            g++-aarch64-linux-gnu \
-            pkg-config-aarch64-linux-gnu
+            g++-aarch64-linux-gnu
 
       - name: Setup aarch64 sysroot and dependencies
         if: ${{ github.event.inputs.arch == 'aarch64' }}
