@@ -41,15 +41,13 @@ This workflow implements **cross-compilation** for Neovim using the canonical Ub
 
 **For aarch64 builds:**
 
-1. **Complete Repository Replacement**: Instead of modifying existing apt sources, the workflow completely replaces the sources configuration to eliminate conflicts from GitHub runner environment
-2. **Architecture Segregation**:
-   - `/etc/apt/sources.list`: amd64-only packages from standard Ubuntu repositories
-   - `/etc/apt/sources.list.d/arm64.list`: arm64-only packages from Ubuntu Ports
-   - Temporary disabling of conflicting source configurations
-3. **Sysroot Setup**: Ubuntu Ports repositories provide pre-built ARM64 dependencies
-4. **Toolchain Configuration**: CMake toolchain file specifies cross-compiler and target environment
-5. **PKG-Config**: Environment configured for cross-compilation library discovery
-6. **Cleanup**: Restore original apt configuration after build completion
+1. **Cross-Compiler Toolchain Only**: Install `gcc-aarch64-linux-gnu` and related tools without adding foreign architectures
+2. **Bundled Dependencies**: Use `-DUSE_BUNDLED=ON` to build all dependencies from source, eliminating the need for target architecture packages
+3. **Static Linking**: Dependencies are built and linked statically, creating self-contained binaries
+4. **CMake Toolchain File**: Specifies cross-compiler and target environment configuration
+5. **No System Package Dependencies**: Avoids complex apt configuration and repository management
+
+This approach follows the **canonical cross-compilation pattern** documented in the referenced jensd.be article, where dependencies are built from source rather than installed as system packages.
 
 ### CMake Toolchain Configuration
 
@@ -68,19 +66,23 @@ set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)  # Use target headers
 
 ### Dependency Management
 
-**Runtime Dependencies** (installed for target architecture):
+**For amd64 builds** (system packages):
 - `libuv1-dev` - Asynchronous I/O library
 - `libmsgpackc-dev` - MessagePack serialization
 - `libtermkey-dev` - Terminal key parsing
 - `libvterm-dev` - Virtual terminal emulator
-- `libluajit-5.1-dev` - LuaJIT runtime (handles aarch64 assembly)
+- `libluajit-5.1-dev` - LuaJIT runtime
 - `libtree-sitter-dev` - Syntax parsing library
+
+**For aarch64 builds** (bundled/built from source):
+- All dependencies are built from source using `-DUSE_BUNDLED=ON`
+- No target architecture system packages required
+- Results in larger but self-contained binaries
 
 **Build Dependencies** (host architecture):
 - `cmake`, `ninja-build` - Build system
 - `gettext` - Internationalization
-- `gcc-aarch64-linux-gnu` - Cross-compiler toolchain
-- `pkg-config` - Library discovery (configured via environment variables)
+- `gcc-aarch64-linux-gnu` - Cross-compiler toolchain (aarch64 only)
 
 ## Output Artifacts
 
@@ -159,49 +161,32 @@ dpkg-deb --field nvim-stable-linux-aarch64.deb Depends
 
 ### Common Build Failures
 
-**Symptom**: `404 Not Found` errors persist after sed modifications
+**Symptom**: `Package 'lua' not found` during cross-compilation
 ```bash
-# Diagnosis: GitHub runners have complex apt configurations beyond sources.list
-# Solution: Complete sources replacement instead of modification (implemented)
-# Verify clean configuration:
-cat /etc/apt/sources.list | grep -E "deb.*\[arch="  # Should show [arch=amd64]
-ls /etc/apt/sources.list.d/*.disabled  # Should show disabled original configs
-```
-
-**Symptom**: `404 Not Found` errors for arm64 packages from security.ubuntu.com
-```bash
-# Diagnosis: Default Ubuntu repositories don't serve arm64 packages
-# Solution: Restrict default repos to amd64, use Ubuntu Ports for arm64 (already configured)
-# Check repository configuration:
-cat /etc/apt/sources.list  # Should show [arch=amd64]
-cat /etc/apt/sources.list.d/arm64.list  # Should show [arch=arm64] with ports.ubuntu.com
-```
-
-**Symptom**: `E: Unable to locate package pkg-config-aarch64-linux-gnu`
-```bash
-# Diagnosis: Package name varies across Ubuntu versions
-# Solution: Use environment variables in CMake toolchain (already configured)
-# The PKG_CONFIG_* variables handle cross-compilation automatically
-```
-
-**Symptom**: `Package 'lua' not found`
-```bash
-# Diagnosis: Missing pkg-config setup
-# Solution: Verify PKG_CONFIG_LIBDIR environment in toolchain file
+# Diagnosis: Missing bundled dependency configuration
+# Solution: Ensure -DUSE_BUNDLED=ON is set for cross-compilation
+cmake -DUSE_BUNDLED=ON ...
 ```
 
 **Symptom**: `undefined reference to symbol` during linking
 ```bash
-# Diagnosis: Architecture mismatch in dependencies
-# Solution: Ensure all :arm64 packages installed correctly
-sudo apt-get install --reinstall libuv1-dev:arm64
+# Diagnosis: Cross-compiler not finding proper libraries
+# Solution: Verify CMake toolchain file configuration
+aarch64-linux-gnu-gcc --version  # Confirm toolchain available
 ```
 
-**Symptom**: CPack fails with architecture errors
+**Symptom**: CMake fails to detect cross-compilation environment
 ```bash
-# Diagnosis: CPACK_DEBIAN_PACKAGE_ARCHITECTURE mismatch
-# Solution: Verify CMake configuration sets correct architecture
-cmake -DCPACK_DEBIAN_PACKAGE_ARCHITECTURE=arm64 ...
+# Diagnosis: Toolchain file not properly configured
+# Solution: Verify CMAKE_SYSTEM_NAME and CMAKE_SYSTEM_PROCESSOR in toolchain file
+grep "CMAKE_SYSTEM" aarch64-toolchain.cmake
+```
+
+**Symptom**: Binary compiled for wrong architecture
+```bash
+# Diagnosis: Cross-compiler not being used
+# Solution: Verify CMAKE_C_COMPILER and CMAKE_CXX_COMPILER settings
+file build/bin/nvim  # Should show ARM aarch64, not x86-64
 ```
 
 ### Build Environment Debugging
@@ -210,39 +195,40 @@ cmake -DCPACK_DEBIAN_PACKAGE_ARCHITECTURE=arm64 ...
 # Verify cross-compiler availability
 aarch64-linux-gnu-gcc --version
 
-# Check repository configuration
-cat /etc/apt/sources.list | head -5  # Should show [arch=amd64] only
-cat /etc/apt/sources.list.d/arm64.list  # Should show [arch=arm64] ports.ubuntu.com only
-ls /etc/apt/sources.list.d/*.disabled  # Should show disabled original configs
+# Check CMake toolchain configuration
+cat aarch64-toolchain.cmake | grep CMAKE_C_COMPILER
+cat aarch64-toolchain.cmake | grep CMAKE_SYSTEM_PROCESSOR
 
-# Validate architecture setup
-dpkg --print-architecture  # Should show: amd64
-dpkg --print-foreign-architectures  # Should show: arm64
+# Verify bundled dependencies configuration
+cmake -L build/ | grep USE_BUNDLED  # Should show ON for cross-compilation
 
-# Test repository access
-apt-cache policy | grep -A5 "ports.ubuntu.com"  # Should show arm64 repos
-apt-cache madison libuv1-dev:arm64  # Should show available arm64 packages
+# Test cross-compilation simple program
+echo 'int main(){return 0;}' > test.c
+aarch64-linux-gnu-gcc test.c -o test.arm64
+file test.arm64  # Should show ARM aarch64
 
-# Check pkg-config paths
-aarch64-linux-gnu-pkg-config --variable pc_path pkg-config 2>/dev/null || echo "Using environment variables"
-
-# Validate installed dependencies
-dpkg-query -l "*:arm64" | grep libuv
+# Check CMake detection
+cmake -B test-build -DCMAKE_TOOLCHAIN_FILE=aarch64-toolchain.cmake
+grep "CMAKE_SYSTEM_PROCESSOR" test-build/CMakeCache.txt  # Should show aarch64
 ```
 
 ### Performance Considerations
 
-- **Build Time**: aarch64 cross-compilation ~15-20 minutes
-- **Artifact Size**: ~8-12MB .deb package
-- **Memory Usage**: ~2GB peak during compilation
+- **Build Time**:
+  - amd64 (system deps): ~8-12 minutes
+  - aarch64 (bundled deps): ~20-30 minutes (compiles all dependencies from source)
+- **Artifact Size**:
+  - amd64: ~8-12MB .deb package (dynamic linking)
+  - aarch64: ~15-25MB .deb package (static/bundled dependencies)
+- **Memory Usage**: ~3-4GB peak during cross-compilation (building multiple dependencies)
 
 ## References
 
 **Primary Sources:**
 - [Neovim Build Documentation](https://github.com/neovim/neovim/wiki/Building-Neovim)
+- [Cross-compiling for ARM/aarch64 on Debian/Ubuntu](https://jensd.be/1126/linux/cross-compiling-for-arm-or-aarch64-on-debian-or-ubuntu) - **Key reference for bundled dependency approach**
 - [CMake Cross Compilation](https://cmake.org/cmake/help/latest/manual/cmake-toolchains.7.html#cross-compiling)
 - [Debian Multi-Arch](https://wiki.debian.org/Multiarch/HOWTO)
-- [Ubuntu Ports](https://wiki.ubuntu.com/ARM/RootfsFromScratch/BuildingComponents)
 
 **Technical Specifications:**
 - [ARM64 ABI](https://github.com/ARM-software/abi-aa/blob/main/aapcs64/aapcs64.rst)
