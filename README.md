@@ -41,10 +41,15 @@ This workflow implements **cross-compilation** for Neovim using the canonical Ub
 
 **For aarch64 builds:**
 
-1. **Sysroot Setup**: Ubuntu Ports repositories provide pre-built ARM64 dependencies
-2. **Toolchain Configuration**: CMake toolchain file specifies cross-compiler and target environment
-3. **PKG-Config**: Environment configured for cross-compilation library discovery
-4. **Dependency Resolution**: `dpkg --add-architecture arm64` enables multi-arch package installation
+1. **Complete Repository Replacement**: Instead of modifying existing apt sources, the workflow completely replaces the sources configuration to eliminate conflicts from GitHub runner environment
+2. **Architecture Segregation**:
+   - `/etc/apt/sources.list`: amd64-only packages from standard Ubuntu repositories
+   - `/etc/apt/sources.list.d/arm64.list`: arm64-only packages from Ubuntu Ports
+   - Temporary disabling of conflicting source configurations
+3. **Sysroot Setup**: Ubuntu Ports repositories provide pre-built ARM64 dependencies
+4. **Toolchain Configuration**: CMake toolchain file specifies cross-compiler and target environment
+5. **PKG-Config**: Environment configured for cross-compilation library discovery
+6. **Cleanup**: Restore original apt configuration after build completion
 
 ### CMake Toolchain Configuration
 
@@ -154,6 +159,15 @@ dpkg-deb --field nvim-stable-linux-aarch64.deb Depends
 
 ### Common Build Failures
 
+**Symptom**: `404 Not Found` errors persist after sed modifications
+```bash
+# Diagnosis: GitHub runners have complex apt configurations beyond sources.list
+# Solution: Complete sources replacement instead of modification (implemented)
+# Verify clean configuration:
+cat /etc/apt/sources.list | grep -E "deb.*\[arch="  # Should show [arch=amd64]
+ls /etc/apt/sources.list.d/*.disabled  # Should show disabled original configs
+```
+
 **Symptom**: `404 Not Found` errors for arm64 packages from security.ubuntu.com
 ```bash
 # Diagnosis: Default Ubuntu repositories don't serve arm64 packages
@@ -197,12 +211,17 @@ cmake -DCPACK_DEBIAN_PACKAGE_ARCHITECTURE=arm64 ...
 aarch64-linux-gnu-gcc --version
 
 # Check repository configuration
-cat /etc/apt/sources.list | head -5  # Should show [arch=amd64]
-cat /etc/apt/sources.list.d/arm64.list  # Should show [arch=arm64] ports.ubuntu.com
+cat /etc/apt/sources.list | head -5  # Should show [arch=amd64] only
+cat /etc/apt/sources.list.d/arm64.list  # Should show [arch=arm64] ports.ubuntu.com only
+ls /etc/apt/sources.list.d/*.disabled  # Should show disabled original configs
 
 # Validate architecture setup
 dpkg --print-architecture  # Should show: amd64
 dpkg --print-foreign-architectures  # Should show: arm64
+
+# Test repository access
+apt-cache policy | grep -A5 "ports.ubuntu.com"  # Should show arm64 repos
+apt-cache madison libuv1-dev:arm64  # Should show available arm64 packages
 
 # Check pkg-config paths
 aarch64-linux-gnu-pkg-config --variable pc_path pkg-config 2>/dev/null || echo "Using environment variables"
