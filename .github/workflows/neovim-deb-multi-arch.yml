@@ -45,10 +45,13 @@ jobs:
       - name: Setup aarch64 cross-compilation environment
         if: ${{ github.event.inputs.arch == 'aarch64' }}
         run: |
-          # Install cross-compilation toolchain (no foreign architecture needed)
+          # Install cross-compilation toolchain
           sudo apt-get install -y \
             gcc-aarch64-linux-gnu \
             g++-aarch64-linux-gnu
+
+          # Install host Lua interpreter needed for build process
+          sudo apt-get install -y lua5.1
 
       - name: Install amd64 dependencies
         if: ${{ github.event.inputs.arch == 'amd64' }}

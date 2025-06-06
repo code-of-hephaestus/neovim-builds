@@ -42,10 +42,15 @@ This workflow implements **cross-compilation** for Neovim using the canonical Ub
 **For aarch64 builds:**
 
 1. **Cross-Compiler Toolchain Only**: Install `gcc-aarch64-linux-gnu` and related tools without adding foreign architectures
-2. **Bundled Dependencies**: Use `-DUSE_BUNDLED=ON` to build all dependencies from source, eliminating the need for target architecture packages
-3. **Static Linking**: Dependencies are built and linked statically, creating self-contained binaries
-4. **CMake Toolchain File**: Specifies cross-compiler and target environment configuration
-5. **No System Package Dependencies**: Avoids complex apt configuration and repository management
+2. **Host Dependencies**: Install build-time tools that run on the build system (x86_64): `lua5.1`, `cmake`, `ninja-build`
+3. **Bundled Target Dependencies**: Use `-DUSE_BUNDLED=ON` to build all target dependencies (LuaJIT, libuv, etc.) from source for aarch64
+4. **Static Linking**: Dependencies are built and linked statically, creating self-contained binaries
+5. **CMake Toolchain File**: Specifies cross-compiler and target environment configuration
+6. **No Target System Packages**: Avoids complex apt configuration and repository management
+
+**Key Distinction**:
+- **Host dependencies** (like `lua5.1`) run on the build machine during compilation
+- **Target dependencies** (like LuaJIT) are compiled for the target architecture and bundled into the binary
 
 This approach follows the **canonical cross-compilation pattern** documented in the referenced jensd.be article, where dependencies are built from source rather than installed as system packages.
 
@@ -78,11 +83,13 @@ set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)  # Use target headers
 - All dependencies are built from source using `-DUSE_BUNDLED=ON`
 - No target architecture system packages required
 - Results in larger but self-contained binaries
+- **Note**: Host Lua interpreter (`lua5.1`) is still needed on the build system for CMake scripts, while target LuaJIT is built from bundled sources
 
 **Build Dependencies** (host architecture):
 - `cmake`, `ninja-build` - Build system
 - `gettext` - Internationalization
 - `gcc-aarch64-linux-gnu` - Cross-compiler toolchain (aarch64 only)
+- `lua5.1` - Host Lua interpreter needed for build process (aarch64 only)
 
 ## Output Artifacts
 
@@ -160,6 +167,14 @@ dpkg-deb --field nvim-stable-linux-aarch64.deb Depends
 ## Troubleshooting
 
 ### Common Build Failures
+
+**Symptom**: `Failed to find a Lua 5.1-compatible interpreter`
+```bash
+# Diagnosis: Missing host Lua interpreter for build process
+# Solution: Install Lua interpreter on build system (not target system)
+sudo apt-get install lua5.1
+# Note: This is separate from target LuaJIT which comes from bundled dependencies
+```
 
 **Symptom**: `Package 'lua' not found` during cross-compilation
 ```bash
