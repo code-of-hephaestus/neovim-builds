@@ -46,8 +46,9 @@ This workflow implements **cross-compilation** for Neovim using the canonical Ub
 3. **Two-Stage Build Process**:
    - **Stage 1**: Build bundled dependencies using `cmake.deps/` with cross-compiler
    - **Stage 2**: Build Neovim itself, which finds the pre-built dependencies
-4. **Static Linking**: Dependencies are built and linked statically, creating self-contained binaries
-5. **CMake Toolchain File**: Specifies cross-compiler and restricts package searches to target-only paths
+4. **LuaJIT Cross-Compilation**: Set `HOSTCC=gcc` to ensure build tools (minilua, buildvm) are compiled for host architecture
+5. **Static Linking**: Dependencies are built and linked statically, creating self-contained binaries
+6. **CMake Toolchain File**: Specifies cross-compiler and restricts package searches to target-only paths
 
 **Key Build Flow**:
 1. **Dependencies**: `cmake -S cmake.deps -B .deps -DCMAKE_TOOLCHAIN_FILE=aarch64-toolchain.cmake -DUSE_BUNDLED=ON`
@@ -55,12 +56,17 @@ This workflow implements **cross-compilation** for Neovim using the canonical Ub
 3. **Main build**: `cmake -B build -DCMAKE_TOOLCHAIN_FILE=aarch64-toolchain.cmake` (finds pre-built deps)
 4. **Build Neovim**: `cmake --build build` (links everything into final aarch64 binary)
 
+**Critical LuaJIT Consideration**:
+- **Build Tools**: `minilua`, `buildvm` must run on build system (x86_64) during compilation
+- **Target Library**: Final LuaJIT library is compiled for target system (aarch64)
+- **Solution**: `HOSTCC=gcc` ensures build tools use native compiler while `CC=aarch64-linux-gnu-gcc` handles target compilation
+
 **Key Distinction**:
 - **Host dependencies** (like `lua5.1`) run on the build machine during compilation
 - **Target dependencies** (like LuaJIT) are compiled for the target architecture in stage 1
 - **Main binary** links pre-built target dependencies in stage 2
 
-This approach follows the **canonical Neovim cross-compilation pattern** documented in the official BUILD.md, where dependencies are built separately before the main build.
+This approach follows the **canonical Neovim cross-compilation pattern** documented in the official BUILD.md, with additional LuaJIT cross-compilation requirements.
 
 ### CMake Toolchain Configuration
 
@@ -267,13 +273,19 @@ find .deps/ -name "luajit*"        # Should show LuaJIT executable
 find .deps/ -name "*libuv*"        # Should show libuv library
 
 # Verify LuaJIT cross-compilation setup
-echo $HOSTCC  # Should be empty or gcc (native)
-which gcc     # Should show native compiler path
-gcc --version # Should show x86_64 native compiler
+echo "Environment variables:"
+echo "HOSTCC=$HOSTCC"     # Should be gcc (native)
+echo "HOST_CC=$HOST_CC"   # Should be gcc (native)
+echo "CC=$CC"             # Should be aarch64-linux-gnu-gcc (cross)
+echo "CXX=$CXX"           # Should be aarch64-linux-gnu-g++ (cross)
+which gcc                 # Should show native compiler path
+gcc --version             # Should show x86_64 native compiler
 
-# Check for LuaJIT build tools (should be x86_64)
+# Check for LuaJIT build tools (should be x86_64 after fix)
 if [ -f .deps/build/src/luajit/src/host/minilua ]; then
   file .deps/build/src/luajit/src/host/minilua  # Should show x86-64, not ARM
+  echo "Testing minilua execution:"
+  .deps/build/src/luajit/src/host/minilua -v 2>/dev/null && echo "✓ minilua runs successfully" || echo "✗ minilua execution failed"
 fi
 
 # Verify final binary architecture
