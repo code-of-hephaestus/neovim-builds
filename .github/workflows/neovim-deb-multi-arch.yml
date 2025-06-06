@@ -102,15 +102,28 @@ jobs:
 
       - name: Configure build
         run: |
+          # Verify toolchain file exists for aarch64 builds
+          if [[ "${{ github.event.inputs.arch }}" == "aarch64" ]]; then
+            if [[ ! -f "aarch64-toolchain.cmake" ]]; then
+              echo "Error: aarch64-toolchain.cmake not found!"
+              ls -la *.cmake || echo "No .cmake files found"
+              exit 1
+            fi
+            echo "Found toolchain file: $(realpath aarch64-toolchain.cmake)"
+          fi
+
           cd neovim
 
           if [[ "${{ github.event.inputs.arch }}" == "aarch64" ]]; then
             # Cross-compilation: two-stage build process
+            TOOLCHAIN_FILE="$(realpath ../aarch64-toolchain.cmake)"
+            echo "Using toolchain file: $TOOLCHAIN_FILE"
+
             # Stage 1: Build bundled dependencies
             echo "Building bundled dependencies for aarch64..."
             cmake -S cmake.deps -B .deps \
               -G Ninja \
-              -DCMAKE_TOOLCHAIN_FILE=../aarch64-toolchain.cmake \
+              -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_FILE" \
               -DCMAKE_BUILD_TYPE=Release \
               -DUSE_BUNDLED=ON
 
@@ -121,7 +134,7 @@ jobs:
             cmake -B build \
               -G Ninja \
               -DCMAKE_BUILD_TYPE=Release \
-              -DCMAKE_TOOLCHAIN_FILE=../aarch64-toolchain.cmake \
+              -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN_FILE" \
               -DCPACK_DEBIAN_PACKAGE_ARCHITECTURE=arm64
           else
             # Native amd64: single-stage build with system dependencies
