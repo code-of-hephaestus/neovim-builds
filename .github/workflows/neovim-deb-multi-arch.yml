@@ -1,4 +1,4 @@
-name: Build Neovim .deb Package
+name: Build Neovim .deb Package (multi-arch)
 
 on:
   workflow_dispatch:
