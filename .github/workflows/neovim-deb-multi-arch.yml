@@ -98,6 +98,11 @@ jobs:
           set(ENV{PKG_CONFIG_PATH} "")
           set(ENV{PKG_CONFIG_LIBDIR} "/usr/lib/aarch64-linux-gnu/pkgconfig")
           set(ENV{PKG_CONFIG_SYSROOT_DIR} "/")
+
+          # Critical: Set HOSTCC for LuaJIT cross-compilation
+          # LuaJIT needs native compiler for build tools (minilua, buildvm)
+          set(ENV{HOSTCC} "gcc")
+          set(ENV{HOST_CC} "gcc")
           EOF
 
       - name: Configure build

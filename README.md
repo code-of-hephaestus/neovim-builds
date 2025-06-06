@@ -80,6 +80,10 @@ set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)   # Search target dirs only (will fa
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)   # Search target dirs only (will fail)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)   # Search target dirs only (will fail)
 
+# Critical for LuaJIT: Set host compiler for build tools
+set(ENV{HOSTCC} "gcc")     # Native compiler for minilua, buildvm
+set(ENV{HOST_CC} "gcc")    # Alternative variable name
+
 # Natural failure → USE_BUNDLED=ON kicks in → dependencies built from source
 ```
 
@@ -244,6 +248,7 @@ aarch64-linux-gnu-gcc --version
 cat aarch64-toolchain.cmake | grep CMAKE_C_COMPILER
 cat aarch64-toolchain.cmake | grep CMAKE_SYSTEM_PROCESSOR
 cat aarch64-toolchain.cmake | grep CMAKE_FIND_ROOT_PATH_MODE
+cat aarch64-toolchain.cmake | grep HOSTCC  # Should show native compiler
 
 # Test cross-compilation simple program
 echo 'int main(){return 0;}' > test.c
@@ -260,6 +265,16 @@ ls -la build/  # Should exist after stage 2 (main build)
 find .deps/ -name "*.a" | head -5  # Should show static libraries
 find .deps/ -name "luajit*"        # Should show LuaJIT executable
 find .deps/ -name "*libuv*"        # Should show libuv library
+
+# Verify LuaJIT cross-compilation setup
+echo $HOSTCC  # Should be empty or gcc (native)
+which gcc     # Should show native compiler path
+gcc --version # Should show x86_64 native compiler
+
+# Check for LuaJIT build tools (should be x86_64)
+if [ -f .deps/build/src/luajit/src/host/minilua ]; then
+  file .deps/build/src/luajit/src/host/minilua  # Should show x86-64, not ARM
+fi
 
 # Verify final binary architecture
 file build/bin/nvim  # Should show ARM aarch64, not x86-64
