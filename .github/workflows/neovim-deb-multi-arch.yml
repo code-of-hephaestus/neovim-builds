@@ -87,15 +87,21 @@ jobs:
 
           # Search for programs in the build host directories
           set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
-          # Search for libraries and headers in the target directories
-          set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
-          set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
-          set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+          # For cross-compilation with bundled deps, be more restrictive
+          set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY NEVER)
+          set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE NEVER)
+          set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE NEVER)
 
-          # Configure pkg-config for cross-compilation
-          set(ENV{PKG_CONFIG_PATH} "")
-          set(ENV{PKG_CONFIG_LIBDIR} "/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig")
-          set(ENV{PKG_CONFIG_SYSROOT_DIR} "/")
+          # Force bundled dependencies by disabling system package finding
+          set(CMAKE_DISABLE_FIND_PACKAGE_PkgConfig TRUE)
+          set(CMAKE_DISABLE_FIND_PACKAGE_LibUV TRUE)
+          set(CMAKE_DISABLE_FIND_PACKAGE_Luv TRUE)
+          set(CMAKE_DISABLE_FIND_PACKAGE_Msgpack TRUE)
+          set(CMAKE_DISABLE_FIND_PACKAGE_LibLUV TRUE)
+          set(CMAKE_DISABLE_FIND_PACKAGE_TreeSitter TRUE)
+          set(CMAKE_DISABLE_FIND_PACKAGE_LibVterm TRUE)
+          set(CMAKE_DISABLE_FIND_PACKAGE_Unibilium TRUE)
+          set(CMAKE_DISABLE_FIND_PACKAGE_LibTermkey TRUE)
           EOF
 
       - name: Configure build

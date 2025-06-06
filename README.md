@@ -57,16 +57,23 @@ This approach follows the **canonical cross-compilation pattern** documented in 
 ### CMake Toolchain Configuration
 
 ```cmake
-# Key directives for cross-compilation
+# Key directives for cross-compilation with bundled dependencies
 set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)
 set(CMAKE_C_COMPILER aarch64-linux-gnu-gcc)
 set(CMAKE_CXX_COMPILER aarch64-linux-gnu-g++)
 
-# Critical: Proper find path modes
+# Critical: Disable all system package finding for cross-compilation
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)  # Use host programs
-set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)  # Use target libraries
-set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)  # Use target headers
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY NEVER)  # Don't search for target libraries
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE NEVER)  # Don't search for target headers
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE NEVER)  # Don't search for target packages
+
+# Force bundled dependencies by explicitly disabling system package finding
+set(CMAKE_DISABLE_FIND_PACKAGE_LibUV TRUE)
+set(CMAKE_DISABLE_FIND_PACKAGE_Luv TRUE)
+set(CMAKE_DISABLE_FIND_PACKAGE_Msgpack TRUE)
+# ... (additional packages disabled to force bundled builds)
 ```
 
 ### Dependency Management
@@ -168,6 +175,14 @@ dpkg-deb --field nvim-stable-linux-aarch64.deb Depends
 
 ### Common Build Failures
 
+**Symptom**: `Could NOT find Luv (missing: LUV_LIBRARY LUV_INCLUDE_DIR)` during cross-compilation
+```bash
+# Diagnosis: CMake still trying to find system packages despite USE_BUNDLED=ON
+# Solution: Use CMAKE_DISABLE_FIND_PACKAGE_* in toolchain file to force bundled builds
+# Verify toolchain configuration:
+grep CMAKE_DISABLE_FIND_PACKAGE aarch64-toolchain.cmake  # Should show disabled packages
+```
+
 **Symptom**: `Failed to find a Lua 5.1-compatible interpreter`
 ```bash
 # Diagnosis: Missing host Lua interpreter for build process
@@ -213,6 +228,7 @@ aarch64-linux-gnu-gcc --version
 # Check CMake toolchain configuration
 cat aarch64-toolchain.cmake | grep CMAKE_C_COMPILER
 cat aarch64-toolchain.cmake | grep CMAKE_SYSTEM_PROCESSOR
+cat aarch64-toolchain.cmake | grep CMAKE_DISABLE_FIND_PACKAGE
 
 # Verify bundled dependencies configuration
 cmake -L build/ | grep USE_BUNDLED  # Should show ON for cross-compilation
@@ -222,9 +238,14 @@ echo 'int main(){return 0;}' > test.c
 aarch64-linux-gnu-gcc test.c -o test.arm64
 file test.arm64  # Should show ARM aarch64
 
-# Check CMake detection
+# Check CMake detection and package disabling
 cmake -B test-build -DCMAKE_TOOLCHAIN_FILE=aarch64-toolchain.cmake
 grep "CMAKE_SYSTEM_PROCESSOR" test-build/CMakeCache.txt  # Should show aarch64
+grep "CMAKE_DISABLE_FIND_PACKAGE" aarch64-toolchain.cmake  # Should show disabled packages
+
+# Verify no system packages are being found (good for bundled builds)
+cmake -B test-build -DCMAKE_TOOLCHAIN_FILE=aarch64-toolchain.cmake --debug-find
+# Should not show system package paths being searched
 ```
 
 ### Performance Considerations
