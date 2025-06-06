@@ -82,26 +82,22 @@ jobs:
           set(CMAKE_C_COMPILER aarch64-linux-gnu-gcc)
           set(CMAKE_CXX_COMPILER aarch64-linux-gnu-g++)
 
-          # Specify the target environment for finding libraries and headers
+          # Set find root path to a non-existent directory for target packages
+          # This ensures system package searches fail and bundled deps are used
           set(CMAKE_FIND_ROOT_PATH /usr/aarch64-linux-gnu)
 
           # Search for programs in the build host directories
           set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
-          # For cross-compilation with bundled deps, be more restrictive
-          set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY NEVER)
-          set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE NEVER)
-          set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE NEVER)
+          # Search for libraries and headers only in target directories
+          # Since we have no target packages installed, this will fail and use bundled
+          set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+          set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+          set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 
-          # Force bundled dependencies by disabling system package finding
-          set(CMAKE_DISABLE_FIND_PACKAGE_PkgConfig TRUE)
-          set(CMAKE_DISABLE_FIND_PACKAGE_LibUV TRUE)
-          set(CMAKE_DISABLE_FIND_PACKAGE_Luv TRUE)
-          set(CMAKE_DISABLE_FIND_PACKAGE_Msgpack TRUE)
-          set(CMAKE_DISABLE_FIND_PACKAGE_LibLUV TRUE)
-          set(CMAKE_DISABLE_FIND_PACKAGE_TreeSitter TRUE)
-          set(CMAKE_DISABLE_FIND_PACKAGE_LibVterm TRUE)
-          set(CMAKE_DISABLE_FIND_PACKAGE_Unibilium TRUE)
-          set(CMAKE_DISABLE_FIND_PACKAGE_LibTermkey TRUE)
+          # Ensure pkg-config doesn't find host packages
+          set(ENV{PKG_CONFIG_PATH} "")
+          set(ENV{PKG_CONFIG_LIBDIR} "/usr/lib/aarch64-linux-gnu/pkgconfig")
+          set(ENV{PKG_CONFIG_SYSROOT_DIR} "/")
           EOF
 
       - name: Configure build

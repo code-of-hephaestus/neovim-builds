@@ -43,16 +43,21 @@ This workflow implements **cross-compilation** for Neovim using the canonical Ub
 
 1. **Cross-Compiler Toolchain Only**: Install `gcc-aarch64-linux-gnu` and related tools without adding foreign architectures
 2. **Host Dependencies**: Install build-time tools that run on the build system (x86_64): `lua5.1`, `cmake`, `ninja-build`
-3. **Bundled Target Dependencies**: Use `-DUSE_BUNDLED=ON` to build all target dependencies (LuaJIT, libuv, etc.) from source for aarch64
-4. **Static Linking**: Dependencies are built and linked statically, creating self-contained binaries
-5. **CMake Toolchain File**: Specifies cross-compiler and target environment configuration
-6. **No Target System Packages**: Avoids complex apt configuration and repository management
+3. **Natural Package Search Failure**: CMake searches for target packages in `/usr/aarch64-linux-gnu` (empty), fails naturally
+4. **Bundled Fallback**: `-DUSE_BUNDLED=ON` kicks in when system packages aren't found, building all dependencies from source
+5. **Static Linking**: Dependencies are built and linked statically, creating self-contained binaries
+6. **CMake Toolchain File**: Specifies cross-compiler and restricts package searches to target-only paths
+
+**Key Flow**:
+1. CMake attempts to find system packages for aarch64 → fails (no packages installed)
+2. `USE_BUNDLED=ON` activates → builds LuaJIT, libuv, etc. from source using cross-compiler
+3. All dependencies are compiled for aarch64 and statically linked
 
 **Key Distinction**:
 - **Host dependencies** (like `lua5.1`) run on the build machine during compilation
 - **Target dependencies** (like LuaJIT) are compiled for the target architecture and bundled into the binary
 
-This approach follows the **canonical cross-compilation pattern** documented in the referenced jensd.be article, where dependencies are built from source rather than installed as system packages.
+This approach follows the **canonical cross-compilation pattern** where CMake naturally falls back to bundled dependencies when system packages aren't available for the target architecture.
 
 ### CMake Toolchain Configuration
 
@@ -63,17 +68,16 @@ set(CMAKE_SYSTEM_PROCESSOR aarch64)
 set(CMAKE_C_COMPILER aarch64-linux-gnu-gcc)
 set(CMAKE_CXX_COMPILER aarch64-linux-gnu-g++)
 
-# Critical: Disable all system package finding for cross-compilation
-set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)  # Use host programs
-set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY NEVER)  # Don't search for target libraries
-set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE NEVER)  # Don't search for target headers
-set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE NEVER)  # Don't search for target packages
+# Set find root path - packages will be searched here and fail (no aarch64 packages installed)
+set(CMAKE_FIND_ROOT_PATH /usr/aarch64-linux-gnu)
 
-# Force bundled dependencies by explicitly disabling system package finding
-set(CMAKE_DISABLE_FIND_PACKAGE_LibUV TRUE)
-set(CMAKE_DISABLE_FIND_PACKAGE_Luv TRUE)
-set(CMAKE_DISABLE_FIND_PACKAGE_Msgpack TRUE)
-# ... (additional packages disabled to force bundled builds)
+# Critical: Let CMake search for target packages and fail naturally
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)  # Use host programs
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)   # Search target dirs only (will fail)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)   # Search target dirs only (will fail)
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)   # Search target dirs only (will fail)
+
+# Natural failure → USE_BUNDLED=ON kicks in → dependencies built from source
 ```
 
 ### Dependency Management
@@ -183,7 +187,15 @@ dpkg-deb --field nvim-stable-linux-aarch64.deb Depends
 grep CMAKE_DISABLE_FIND_PACKAGE aarch64-toolchain.cmake  # Should show disabled packages
 ```
 
-**Symptom**: `Failed to find a Lua 5.1-compatible interpreter`
+**Symptom**: `find_package for module Luv called with REQUIRED, but CMAKE_DISABLE_FIND_PACKAGE_Luv is enabled`
+```bash
+# Diagnosis: Cannot disable REQUIRED packages with CMAKE_DISABLE_FIND_PACKAGE_*
+# Solution: Let CMake attempt to find packages and fail naturally, then use bundled fallback
+# Check toolchain configuration allows natural failure:
+grep CMAKE_FIND_ROOT_PATH_MODE aarch64-toolchain.cmake  # Should show ONLY, not NEVER
+```
+
+**Symptom**: `Could NOT find Luv (missing: LUV_LIBRARY LUV_INCLUDE_DIR)` during cross-compilation
 ```bash
 # Diagnosis: Missing host Lua interpreter for build process
 # Solution: Install Lua interpreter on build system (not target system)
@@ -228,7 +240,7 @@ aarch64-linux-gnu-gcc --version
 # Check CMake toolchain configuration
 cat aarch64-toolchain.cmake | grep CMAKE_C_COMPILER
 cat aarch64-toolchain.cmake | grep CMAKE_SYSTEM_PROCESSOR
-cat aarch64-toolchain.cmake | grep CMAKE_DISABLE_FIND_PACKAGE
+cat aarch64-toolchain.cmake | grep CMAKE_FIND_ROOT_PATH_MODE
 
 # Verify bundled dependencies configuration
 cmake -L build/ | grep USE_BUNDLED  # Should show ON for cross-compilation
@@ -238,14 +250,14 @@ echo 'int main(){return 0;}' > test.c
 aarch64-linux-gnu-gcc test.c -o test.arm64
 file test.arm64  # Should show ARM aarch64
 
-# Check CMake detection and package disabling
+# Check CMake detection and find root path
 cmake -B test-build -DCMAKE_TOOLCHAIN_FILE=aarch64-toolchain.cmake
 grep "CMAKE_SYSTEM_PROCESSOR" test-build/CMakeCache.txt  # Should show aarch64
-grep "CMAKE_DISABLE_FIND_PACKAGE" aarch64-toolchain.cmake  # Should show disabled packages
+grep "CMAKE_FIND_ROOT_PATH" test-build/CMakeCache.txt    # Should show /usr/aarch64-linux-gnu
 
-# Verify no system packages are being found (good for bundled builds)
-cmake -B test-build -DCMAKE_TOOLCHAIN_FILE=aarch64-toolchain.cmake --debug-find
-# Should not show system package paths being searched
+# Verify package searches fail naturally (leading to bundled builds)
+cmake -B test-build -DCMAKE_TOOLCHAIN_FILE=aarch64-toolchain.cmake --debug-find 2>&1 | grep "Could NOT find"
+# Should show packages not found (this is good - triggers bundled fallback)
 ```
 
 ### Performance Considerations
