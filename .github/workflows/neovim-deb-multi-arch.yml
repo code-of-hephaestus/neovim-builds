@@ -1,7 +1,16 @@
-name: Build Neovim .deb Packages
+name: Build Neovim .deb Package
 
 on:
   workflow_dispatch:
+    inputs:
+      arch:
+        description: "Target architecture"
+        required: true
+        default: "amd64"
+        type: choice
+        options:
+          - amd64
+          - aarch64
 
 env:
   ACTIONS_RUNNER_DEBUG: true
@@ -9,7 +18,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
       contents: write
@@ -17,61 +26,44 @@ jobs:
       group: ${{ github.workflow }}-${{ github.ref }}
       cancel-in-progress: true
 
-    strategy:
-      matrix:
-        arch: [amd64, aarch64]
-
     steps:
-      - name: Set up QEMU for cross-compilation
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Install Build Prerequisites
+      - name: Set up prerequisites
         run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build gettext cmake unzip curl \
-              build-essential binutils lintian debhelper dh-make devscripts
+              build-essential binutils lintian debhelper dh-make devscripts qemu-user-static
 
       - name: Clone Neovim
         run: |
           git clone https://github.com/neovim/neovim
           cd neovim && git checkout stable
 
-      - name: Build Neovim for ${{ matrix.arch }}
+      - name: Build Neovim
+        id: build
         run: |
           cd neovim
-          export DEB_HOST_ARCH=${{ matrix.arch == 'aarch64' && 'arm64' || 'amd64' }}
-          export CMAKE_EXTRA_FLAGS="-DCMAKE_SYSTEM_PROCESSOR=$DEB_HOST_ARCH"
           make CMAKE_BUILD_TYPE=Release
           cd build
-          cpack -G DEB -D CPACK_PACKAGE_FILE_NAME="nvim-${{ matrix.arch }}-stable"
-          deb_file=$(realpath nvim-${{ matrix.arch }}-stable.deb)
-          echo "deb_file=$deb_file" >> $GITHUB_OUTPUT
-        id: build-nvim-deb
+          cpack -G DEB -D CPACK_PACKAGE_FILE_NAME="nvim-stable-linux-${{ github.event.inputs.arch }}"
+          deb_path=$(realpath nvim-stable-linux-${{ github.event.inputs.arch }}.deb)
+          echo "deb_file=$deb_path" >> "$GITHUB_OUTPUT"
 
-      - name: Parse version number
-        id: parse-version
+      - name: Parse version number from Git tag
+        id: version
         run: |
-          version_number=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.tag_name')
-          echo "version_number=${version_number#v}" >> $GITHUB_OUTPUT
+          version=$(cd neovim && git describe --tags --abbrev=0)
+          echo "version_number=${version#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Create GitHub release (once for amd64 only)
-        if: matrix.arch == 'amd64'
-        id: create-release
+      - name: Create GitHub release
+        id: create_release
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: nvim-${{ steps.parse-version.outputs.version_number }}-stable
-          name: nvim-${{ steps.parse-version.outputs.version_number }}-stable
-          body: Stable Neovim build for multiple architectures
-
-      - name: Upload release asset
-        uses: softprops/action-gh-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: nvim-${{ steps.parse-version.outputs.version_number }}-stable
-          files: ${{ steps.build-nvim-deb.outputs.deb_file }}
+          tag_name: nvim-v${{ steps.version.outputs.version_number }}-stable-linux-${{ github.event.inputs.arch }}
+          name: nvim-v${{ steps.version.outputs.version_number }}-stable-linux-${{ github.event.inputs.arch }}
+          body: |
+            NVIM v${{ steps.version.outputs.version_number }}
+            Build type: Release
+            Architecture: ${{ github.event.inputs.arch }}
+          files: ${{ steps.build.outputs.deb_file }}
