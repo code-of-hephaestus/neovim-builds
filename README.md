@@ -154,6 +154,15 @@ dpkg-deb --field nvim-stable-linux-aarch64.deb Depends
 
 ### Common Build Failures
 
+**Symptom**: `404 Not Found` errors for arm64 packages from security.ubuntu.com
+```bash
+# Diagnosis: Default Ubuntu repositories don't serve arm64 packages
+# Solution: Restrict default repos to amd64, use Ubuntu Ports for arm64 (already configured)
+# Check repository configuration:
+cat /etc/apt/sources.list  # Should show [arch=amd64]
+cat /etc/apt/sources.list.d/arm64.list  # Should show [arch=arm64] with ports.ubuntu.com
+```
+
 **Symptom**: `E: Unable to locate package pkg-config-aarch64-linux-gnu`
 ```bash
 # Diagnosis: Package name varies across Ubuntu versions
@@ -187,8 +196,16 @@ cmake -DCPACK_DEBIAN_PACKAGE_ARCHITECTURE=arm64 ...
 # Verify cross-compiler availability
 aarch64-linux-gnu-gcc --version
 
+# Check repository configuration
+cat /etc/apt/sources.list | head -5  # Should show [arch=amd64]
+cat /etc/apt/sources.list.d/arm64.list  # Should show [arch=arm64] ports.ubuntu.com
+
+# Validate architecture setup
+dpkg --print-architecture  # Should show: amd64
+dpkg --print-foreign-architectures  # Should show: arm64
+
 # Check pkg-config paths
-aarch64-linux-gnu-pkg-config --variable pc_path pkg-config
+aarch64-linux-gnu-pkg-config --variable pc_path pkg-config 2>/dev/null || echo "Using environment variables"
 
 # Validate installed dependencies
 dpkg-query -l "*:arm64" | grep libuv

@@ -48,10 +48,19 @@ jobs:
           # Add aarch64 architecture
           sudo dpkg --add-architecture arm64
 
+          # Backup original sources.list
+          sudo cp /etc/apt/sources.list /etc/apt/sources.list.backup
+
+          # Modify existing repositories to only serve amd64
+          sudo sed -i 's/^deb /deb [arch=amd64] /' /etc/apt/sources.list
+          sudo sed -i 's/^deb-src /deb-src [arch=amd64] /' /etc/apt/sources.list
+
           # Add Ubuntu Ports repositories for arm64 packages
           echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ noble main universe" | \
             sudo tee /etc/apt/sources.list.d/arm64.list
           echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ noble-updates main universe" | \
+            sudo tee -a /etc/apt/sources.list.d/arm64.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports/ noble-security main universe" | \
             sudo tee -a /etc/apt/sources.list.d/arm64.list
 
           sudo apt-get update
