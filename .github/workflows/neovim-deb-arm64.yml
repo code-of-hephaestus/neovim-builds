@@ -9,7 +9,7 @@ env:
 
 jobs:
   build:
-    runs-on: [self-hosted, linux, arm64]
+    runs-on: [blacksmith-4vcpu-ubuntu-2404-arm, linux, arm64]
     timeout-minutes: 60
     permissions:
       contents: write
