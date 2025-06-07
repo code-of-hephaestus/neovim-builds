@@ -64,11 +64,21 @@ jobs:
         run: |
           cd neovim/build
           # Test that the package can be installed
-          sudo dpkg -i nvim-stable-linux-aarch64.deb || true
-          sudo apt-get install -f -y  # Fix any dependency issues
+          sudo apt install -y ./nvim-stable-linux-aarch64.deb
 
           # Verify installation
           which nvim && nvim --version
+
+      - name: Prepare release asset
+        id: prepare-asset
+        run: |
+          cd neovim/build
+          # Rename file to include version in filename
+          versioned_filename="nvim-${{ steps.parse-version-number.outputs.version_number }}-stable-linux-aarch64.deb"
+          cp nvim-stable-linux-aarch64.deb "$versioned_filename"
+          versioned_file=$(realpath "$versioned_filename")
+          echo "versioned_file=$versioned_file" >> $GITHUB_OUTPUT
+          echo "versioned_filename=$versioned_filename" >> $GITHUB_OUTPUT
 
       - name: Create Github release
         id: create-new-release
@@ -91,9 +101,8 @@ jobs:
             **Installation:**
             ```bash
             # Download and install
-            wget https://github.com/${{ github.repository }}/releases/download/nvim-${{ steps.parse-version-number.outputs.version_number }}-stable-linux-aarch64/nvim-${{ steps.parse-version-number.outputs.version_number }}-stable-linux-aarch64.deb
-            sudo dpkg -i nvim-${{ steps.parse-version-number.outputs.version_number }}-stable-linux-aarch64.deb
-            sudo apt-get install -f  # Fix any dependency issues
+            wget https://github.com/${{ github.repository }}/releases/download/nvim-${{ steps.parse-version-number.outputs.version_number }}-stable-linux-aarch64/${{ steps.prepare-asset.outputs.versioned_filename }}
+            sudo apt install ./${{ steps.prepare-asset.outputs.versioned_filename }}
             ```
 
             **Verification:**
@@ -104,4 +113,4 @@ jobs:
             ---
 
             ${{ steps.parse-release-info.outputs.release_info }}
-          files: ${{ steps.build-nvim-deb-pkg.outputs.deb_file }}
+          files: ${{ steps.prepare-asset.outputs.versioned_file }}

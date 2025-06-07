@@ -22,15 +22,13 @@ Both workflows follow identical build methodologies with architecture-specific a
 
 #### AMD64 Workflow
 ```yaml
-runs-on: blacksmith-4vcpu-ubuntu-2404
+runs-on: blacksmith-32vcpu-ubuntu-2404
 ```
 
 #### ARM64 Workflow
 ```yaml
-runs-on: [blacksmith-4vcpu-ubuntu-2404-arm, linux, arm64]
+runs-on: blacksmith-32vcpu-ubuntu-2404-arm
 ```
-
-The ARM64 runner specification uses array notation to ensure proper job allocation to ARM64-capable Blacksmith infrastructure.
 
 ### Build Process Pipeline
 
@@ -71,10 +69,17 @@ file bin/nvim | grep -q "ARM aarch64" && echo "✓ aarch64 binary verified"
 #### 5. Package Validation
 Both workflows perform installation testing to verify package integrity:
 ```bash
-# Architecture-specific package installation
-sudo dpkg -i nvim-stable-linux-{amd64|aarch64}.deb
-sudo apt-get install -f -y  # Dependency resolution
+# Architecture-specific package installation with automatic dependency resolution
+sudo apt install -y ./nvim-stable-linux-{amd64|aarch64}.deb
 which nvim && nvim --version  # Functionality verification
+```
+
+#### 6. Release Asset Preparation
+Workflows rename package files to include version information before upload:
+```bash
+# Create versioned filename for release asset
+versioned_filename="nvim-{version}-stable-linux-{arch}.deb"
+cp nvim-stable-linux-{arch}.deb "$versioned_filename"
 ```
 
 ### Release Artifact Generation
@@ -99,16 +104,18 @@ Both workflows now implement identical feature sets with architecture-specific a
 | Aspect | AMD64 | ARM64 |
 |--------|-------|--------|
 | Binary Verification | ✅ (`x86-64`) | ✅ (`ARM aarch64`) |
-| Installation Testing | ✅ | ✅ |
+| Installation Testing | ✅ (`apt install`) | ✅ (`apt install`) |
+| Asset Preparation | ✅ (Version-named files) | ✅ (Version-named files) |
 | Release Body | Enhanced with build metadata | Enhanced with build metadata |
 | Action Versions | `@v2` (action-gh-release) | `@v2` (action-gh-release) |
-| Upload Mechanism | Single action upload | Single action upload |
+| Runner Specification | 32vCPU Blacksmith | 32vCPU Blacksmith ARM |
 
 ### Enhanced Verification Pipeline
 
 Both workflows implement comprehensive validation stages:
 - **Architecture Verification**: Binary inspection via `file` command with architecture-specific pattern matching
-- **Installation Testing**: Package installation validation with dependency resolution
+- **Installation Testing**: Package installation validation using `sudo apt install` for automatic dependency resolution
+- **Asset Preparation**: File renaming to include version information in release artifacts
 - **Enhanced Documentation**: Standardized release notes with installation instructions and verification commands
 
 ## Technical Dependencies
@@ -131,7 +138,7 @@ Debug flags enabled for comprehensive workflow telemetry during execution.
 - **GitHub API**: Release metadata extraction
 - **jq**: JSON parsing for version extraction
 - **CPack**: Debian package generation
-- **Blacksmith Runners**: Architecture-specific compute infrastructure
+- **Blacksmith Runners**: High-performance 32vCPU architecture-specific compute infrastructure
 - **GitHub Actions**: `softprops/action-gh-release@v2` for unified release management
 
 ### Workflow Modernization
@@ -139,6 +146,8 @@ Debug flags enabled for comprehensive workflow telemetry during execution.
 Both workflows implement current GitHub Actions best practices:
 - **Environment Files**: Uses `$GITHUB_OUTPUT` instead of deprecated `::set-output` commands
 - **Unified Release Management**: Single action handles both release creation and asset upload
+- **Enhanced Package Installation**: Uses `sudo apt install` for automatic dependency resolution
+- **Asset Naming**: Version-specific filenames for release artifacts
 - **Defensive Validation**: Comprehensive verification pipeline with explicit error propagation
 
 ## Execution Context
