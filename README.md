@@ -58,17 +58,23 @@ version_number=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tag
   jq -r '.body' | head -5 | grep -oE "v[0-9]+.[0-9].+[0-9]+")
 ```
 
-#### 4. Binary Verification (ARM64 Only)
-The ARM64 workflow includes explicit architecture verification:
+#### 4. Binary Verification
+Both workflows include explicit architecture verification:
 ```bash
+# AMD64 verification
+file bin/nvim | grep -q "x86-64" && echo "✓ amd64 binary verified"
+
+# ARM64 verification
 file bin/nvim | grep -q "ARM aarch64" && echo "✓ aarch64 binary verified"
 ```
 
-#### 5. Package Validation (ARM64 Only)
-Performs installation testing to verify package integrity:
+#### 5. Package Validation
+Both workflows perform installation testing to verify package integrity:
 ```bash
-sudo dpkg -i nvim-stable-linux-aarch64.deb
+# Architecture-specific package installation
+sudo dpkg -i nvim-stable-linux-{amd64|aarch64}.deb
 sudo apt-get install -f -y  # Dependency resolution
+which nvim && nvim --version  # Functionality verification
 ```
 
 ### Release Artifact Generation
@@ -86,18 +92,24 @@ The final release assets maintain version-prefixed naming for disambiguation.
 
 ## Implementation Differences
 
-### Workflow Variations
+### Workflow Standardization
+
+Both workflows now implement identical feature sets with architecture-specific adaptations:
 
 | Aspect | AMD64 | ARM64 |
 |--------|-------|--------|
-| Binary Verification | ❌ | ✅ |
-| Installation Testing | ❌ | ✅ |
-| Release Body | Upstream release notes | Enhanced with build metadata |
-| Action Versions | `@v1` (upload-release-asset) | `@v2` (action-gh-release) |
+| Binary Verification | ✅ (`x86-64`) | ✅ (`ARM aarch64`) |
+| Installation Testing | ✅ | ✅ |
+| Release Body | Enhanced with build metadata | Enhanced with build metadata |
+| Action Versions | `@v2` (action-gh-release) | `@v2` (action-gh-release) |
+| Upload Mechanism | Single action upload | Single action upload |
 
-### ARM64 Enhanced Features
+### Enhanced Verification Pipeline
 
-The ARM64 workflow implements additional verification stages due to cross-compilation complexity and provides enhanced release documentation with installation instructions and verification commands.
+Both workflows implement comprehensive validation stages:
+- **Architecture Verification**: Binary inspection via `file` command with architecture-specific pattern matching
+- **Installation Testing**: Package installation validation with dependency resolution
+- **Enhanced Documentation**: Standardized release notes with installation instructions and verification commands
 
 ## Technical Dependencies
 
@@ -120,9 +132,17 @@ Debug flags enabled for comprehensive workflow telemetry during execution.
 - **jq**: JSON parsing for version extraction
 - **CPack**: Debian package generation
 - **Blacksmith Runners**: Architecture-specific compute infrastructure
+- **GitHub Actions**: `softprops/action-gh-release@v2` for unified release management
+
+### Workflow Modernization
+
+Both workflows implement current GitHub Actions best practices:
+- **Environment Files**: Uses `$GITHUB_OUTPUT` instead of deprecated `::set-output` commands
+- **Unified Release Management**: Single action handles both release creation and asset upload
+- **Defensive Validation**: Comprehensive verification pipeline with explicit error propagation
 
 ## Execution Context
 
 These workflows operate under manual dispatch model, requiring explicit user initiation. The architecture-specific builds ensure native compilation performance while maintaining consistent packaging standards across both x86_64 and aarch64 target platforms.
 
-The implementation follows a contract-first approach with explicit error propagation and defensive verification stages, particularly evident in the ARM64 workflow's comprehensive validation pipeline.
+Both implementations follow a contract-first approach with explicit error propagation and defensive verification stages, implementing comprehensive validation pipelines that verify binary architecture, test package installation, and provide enhanced release documentation with installation instructions and verification commands.

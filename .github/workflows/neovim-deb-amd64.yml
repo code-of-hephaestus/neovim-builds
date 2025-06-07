@@ -22,8 +22,8 @@ jobs:
         id: install-build-prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build gettext cmake unzip curl jq
-          sudo apt-get install -y build-essential binutils lintian debhelper dh-make devscripts
+          sudo apt-get install ninja-build gettext cmake unzip curl
+          sudo apt-get install build-essential binutils lintian debhelper dh-make devscripts
 
       - name: Checkout Neovim Repository and build
         id: build-nvim-deb-pkg
@@ -32,28 +32,15 @@ jobs:
           cd neovim
           git checkout stable
           make CMAKE_BUILD_TYPE=Release
-          cd build
-          cpack -G DEB -D CPACK_PACKAGE_FILE_NAME="nvim-stable-linux-amd64"
+          cd build && cpack -G DEB -D CPACK_PACKAGE_FILE_NAME="nvim-stable-linux-amd64"
           deb_file=$(realpath nvim-stable-linux-amd64.deb)
           echo "deb_file=$deb_file" >> $GITHUB_OUTPUT
 
       - name: Parse release info
         id: parse-release-info
         run: |
-          echo "Fetching release information from GitHub API..."
-          if ! release_data=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable); then
-            echo "Failed to fetch release data"
-            exit 1
-          fi
-
-          if ! release_info=$(echo "$release_data" | jq -r '.body' | head -5); then
-            echo "Failed to parse release body"
-            exit 1
-          fi
-
-          echo "Release info:"
+          release_info=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.body' | head -5)
           echo "$release_info"
-
           {
             echo "release_info<<EOL"
             echo "$release_info"
@@ -63,16 +50,7 @@ jobs:
       - name: Parse version number
         id: parse-version-number
         run: |
-          echo "Parsing version number..."
-          # Try to get version from the release info first
-          if ! version_number=$(echo '${{ steps.parse-release-info.outputs.release_info }}' | grep -oE "v[0-9]+\.[0-9]+\.[0-9]+"); then
-            echo "Failed to parse version from release info, trying git tag..."
-            # Fallback: get version from git tag
-            cd neovim
-            version_number=$(git describe --tags --abbrev=0)
-          fi
-
-          echo "Detected version: $version_number"
+          version_number=$(curl -s https://api.github.com/repos/neovim/neovim/releases/tags/stable | jq -r '.body' | head -5 | grep -oE "v[0-9]+.[0-9].+[0-9]+")
           echo "version_number=$version_number" >> $GITHUB_OUTPUT
 
       - name: Verify binary architecture
@@ -108,7 +86,7 @@ jobs:
             - Architecture: amd64 (x86_64)
             - Built from: `stable` branch
             - Build type: Release
-            - Built on: blacksmith-4vcpu-ubuntu-2404
+            - Built natively on AMD64 runner
 
             **Installation:**
             ```bash
@@ -127,5 +105,3 @@ jobs:
 
             ${{ steps.parse-release-info.outputs.release_info }}
           files: ${{ steps.build-nvim-deb-pkg.outputs.deb_file }}
-          draft: false
-          prerelease: false
